@@ -62,7 +62,7 @@ OAuth2Provider.prototype.oauth = function() {
 
       self.emit('enforce_login', req, res, authorize_url, function() {
         // user is logged in, render approval page
-        self.emit('authorize_form', req, res, authorize_url);
+        self.emit('authorize_form', req, res, client_id, authorize_url);
       });
     });
 

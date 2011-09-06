@@ -1,0 +1,14 @@
+{
+  "name": "oauth2-provider",
+  "version": "0.0.0",
+  "description": "A simple customizable OAuth 2.0 provider (server) for node.js.",
+  "author": {
+    "name": "Amir Malik",
+    "url": "http://amir.unoc.net/"
+  },
+  "main": "index",
+  "dependencies": {
+    "connect" : ">=1.6.0",
+    "serializer": ">=0.0.2"
+  }
+}

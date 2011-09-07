@@ -27,7 +27,7 @@ myOAP.on('enforce_login', function(req, res, authorize_url, next) {
 // render the authorize form with the submission URL
 // use two submit buttons named "allow" and "deny" for the user's choice
 myOAP.on('authorize_form', function(req, res, client_id, authorize_url) {
-  res.end('<html>this app wants to access your dialoggs account... <form method="post" action="' + authorize_url + '"><button name="allow">Allow</button><button name="deny">Deny</button></form>');
+  res.end('<html>this app wants to access your account... <form method="post" action="' + authorize_url + '"><button name="allow">Allow</button><button name="deny">Deny</button></form>');
 });
 
 // save the generated grant code for the current user

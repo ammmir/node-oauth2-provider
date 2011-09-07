@@ -16,6 +16,15 @@ function OAuth2Provider(crypt_key, sign_key) {
 
 OAuth2Provider.prototype = new EventEmitter();
 
+OAuth2Provider.prototype.generateAccessToken = function(user_id, client_id) {
+  var out = {
+    access_token: this.serializer.stringify([user_id, client_id]),
+    refresh_token: null,
+  };
+
+  return out;
+};
+
 OAuth2Provider.prototype.login = function() {
   var self = this;
 
@@ -48,10 +57,11 @@ OAuth2Provider.prototype.oauth = function() {
 
   return connect.router(function(app) {
     app.get('/oauth/authorize', function(req, res, next) {
-      var    client_id = req.query.client_id,
-          redirect_uri = req.query.redirect_uri,
-                 scope = req.query.scope, // optional
-                  type = req.query.type; // 'web_server'
+      var     client_id = req.query.client_id,
+           redirect_uri = req.query.redirect_uri,
+          response_type = req.query.response_type || 'code', // 'code' or 'token'
+                  scope = req.query.scope, // optional
+                   type = req.query.type; // 'web_server'
 
       if(!client_id || !redirect_uri) {
         res.writeHead(400);
@@ -60,28 +70,51 @@ OAuth2Provider.prototype.oauth = function() {
 
       var authorize_url = req.url;
 
-      self.emit('enforce_login', req, res, authorize_url, function() {
+      self.emit('enforce_login', req, res, authorize_url, function(user_id) {
+        // store user_id in an HMAC-protected encrypted query param
+        authorize_url += '&' + querystring.stringify({x_user_id: self.serializer.stringify(user_id)});
+
         // user is logged in, render approval page
         self.emit('authorize_form', req, res, client_id, authorize_url);
       });
     });
 
     app.post('/oauth/authorize', function(req, res, next) {
-      var    client_id = req.query.client_id,
-          redirect_uri = req.query.redirect_uri;
+      var     client_id = req.query.client_id,
+           redirect_uri = req.query.redirect_uri,
+          response_type = req.query.response_type || 'code',
+              x_user_id = req.query.x_user_id;
 
-      var url = redirect_uri + '?';
+      var url = redirect_uri;
+
+      switch(response_type) {
+        case 'code': url += '?'; break;
+        case 'token': url += '#'; break;
+        default:
+          res.writeHead(400);
+          return res.end('invalid response_type requested');
+      }
 
       if('allow' in req.body) {
-        var code = serializer.randomString(128);
-        self.emit('save_grant', req, client_id, code);
+        if('token' == response_type) {
+          try {
+            var user_id = self.serializer.parse(x_user_id);
 
-        url += querystring.stringify({code: code});
+            url += querystring.stringify(self.generateAccessToken(user_id, client_id));
+          } catch(e) {
+            res.writeHead(500);
+            return res.end(e.message);
+          }
+        } else {
+          var code = serializer.randomString(128);
+          self.emit('save_grant', req, client_id, code);
+
+          url += querystring.stringify({code: code});
+        }
       } else if('deny' in req.body) {
         url += querystring.stringify({error: 'access_denied'});
       }
 
-      // redirect back to redirect_uri?code=...
       res.writeHead(303, {Location: url});
       return res.end();
     });
@@ -98,13 +131,8 @@ OAuth2Provider.prototype.oauth = function() {
           return res.end(err.message);
         }
 
-        var out = {
-          access_token: self.serializer.stringify([user_id, client_id]),
-          refresh_token: null,
-        };
-
         res.writeHead(200, {'Content-type': 'application/json'});
-        res.end(JSON.stringify(out));
+        res.end(JSON.stringify(self.generateAccessToken(user_id, client_id)));
 
         self.emit('remove_grant', user_id, client_id, code);
       });

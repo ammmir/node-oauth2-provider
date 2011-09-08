@@ -31,11 +31,12 @@ myOAP.on('authorize_form', function(req, res, client_id, authorize_url) {
 });
 
 // save the generated grant code for the current user
-myOAP.on('save_grant', function(req, client_id, code) {
+myOAP.on('save_grant', function(req, client_id, code, next) {
   if(!(req.session.user in myGrants))
     myGrants[req.session.user] = {};
 
   myGrants[req.session.user][client_id] = code;
+  next();
 });
 
 // remove the grant when the access token has been sent

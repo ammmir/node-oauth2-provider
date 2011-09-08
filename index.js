@@ -106,17 +106,18 @@ OAuth2Provider.prototype.oauth = function() {
           }
         } else {
           var code = serializer.randomString(128);
-          self.emit('save_grant', req, client_id, code);
 
-          var extras = {
-            code: code,
-          };
+          self.emit('save_grant', req, client_id, code, function() {
+            var extras = {
+              code: code,
+            };
 
-          // pass back anti-CSRF opaque value
-          if(state)
-            extras['state'] = state;
+            // pass back anti-CSRF opaque value
+            if(state)
+              extras['state'] = state;
 
-          url += querystring.stringify(extras);
+            url += querystring.stringify(extras);
+          });
         }
       } else if('deny' in req.body) {
         url += querystring.stringify({error: 'access_denied'});

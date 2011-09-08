@@ -60,9 +60,17 @@ myOAP.on('lookup_grant', function(client_id, client_secret, code, next) {
   next(new Error('no such grant found'));
 });
 
+// embed an opaque value in the generated access token
+myOAP.on('create_access_token', function(user_id, client_id, next) {
+  var data = 'blah'; // can be any data type or null
+
+  next(data);
+});
+
 // an access token was received in a URL query string parameter or HTTP header
-myOAP.on('access_token', function(req, user_id, client_id, next) {
+myOAP.on('access_token', function(req, user_id, client_id, data, next) {
   req.session.user = user_id;
+  req.session.data = data;
   next();
 });
 
@@ -98,7 +106,7 @@ function router(app) {
 
   app.get('/secret', function(req, res, next) {
     if(req.session.user) {
-      res.end('proceed to secret lair');
+      res.end('proceed to secret lair, extra data: ' + JSON.stringify(req.session.data));
     } else {
       res.writeHead(403);
       res.end('no');

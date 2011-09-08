@@ -16,9 +16,9 @@ function OAuth2Provider(crypt_key, sign_key) {
 
 OAuth2Provider.prototype = new EventEmitter();
 
-OAuth2Provider.prototype.generateAccessToken = function(user_id, client_id) {
+OAuth2Provider.prototype.generateAccessToken = function(user_id, client_id, extra_data) {
   var out = {
-    access_token: this.serializer.stringify([user_id, client_id]),
+    access_token: this.serializer.stringify([user_id, client_id, +new Date, extra_data]),
     refresh_token: null,
   };
 
@@ -29,7 +29,7 @@ OAuth2Provider.prototype.login = function() {
   var self = this;
 
   return function(req, res, next) {
-    var data, atok, user_id, client_id;
+    var data, atok, user_id, client_id, grant_date, extra_data;
 
     if(req.query['access_token']) {
       atok = req.query['access_token'];
@@ -43,12 +43,14 @@ OAuth2Provider.prototype.login = function() {
       data = self.serializer.parse(atok);
       user_id = data[0];
       client_id = data[1];
+      grant_date = data[2];
+      extra_data = data[3];
     } catch(e) {
       res.writeHead(400);
       return res.end(e.message);
     }
 
-    self.emit('access_token', req, user_id, client_id, next);
+    self.emit('access_token', req, user_id, client_id, extra_data, next);
   };
 };
 
@@ -96,14 +98,21 @@ OAuth2Provider.prototype.oauth = function() {
 
       if('allow' in req.body) {
         if('token' == response_type) {
-          try {
-            var user_id = self.serializer.parse(x_user_id);
+          var user_id;
 
-            url += querystring.stringify(self.generateAccessToken(user_id, client_id));
+          try {
+            user_id = self.serializer.parse(x_user_id);
           } catch(e) {
             res.writeHead(500);
             return res.end(e.message);
           }
+
+          self.emit('create_access_token', user_id, client_id, function(extra_data) {
+            url += querystring.stringify(self.generateAccessToken(user_id, client_id, extra_data));
+
+            res.writeHead(303, {Location: url});
+            res.end();
+          });
         } else {
           var code = serializer.randomString(128);
 
@@ -117,14 +126,17 @@ OAuth2Provider.prototype.oauth = function() {
               extras['state'] = state;
 
             url += querystring.stringify(extras);
+
+            res.writeHead(303, {Location: url});
+            res.end();
           });
         }
-      } else if('deny' in req.body) {
+      } else {
         url += querystring.stringify({error: 'access_denied'});
-      }
 
-      res.writeHead(303, {Location: url});
-      return res.end();
+        res.writeHead(303, {Location: url});
+        res.end();
+      }
     });
 
     app.post('/oauth/access_token', function(req, res, next) {
@@ -140,7 +152,10 @@ OAuth2Provider.prototype.oauth = function() {
         }
 
         res.writeHead(200, {'Content-type': 'application/json'});
-        res.end(JSON.stringify(self.generateAccessToken(user_id, client_id)));
+
+        self.emit('create_access_token', user_id, client_id, function(extra_data) {
+          res.end(JSON.stringify(self.generateAccessToken(user_id, client_id, extra_data)));
+        });
 
         self.emit('remove_grant', user_id, client_id, code);
       });

@@ -57,17 +57,15 @@ OAuth2Provider.prototype.oauth = function() {
 
   return connect.router(function(app) {
     app.get('/oauth/authorize', function(req, res, next) {
-      var     client_id = req.query.client_id,
-           redirect_uri = req.query.redirect_uri,
-          response_type = req.query.response_type || 'code', // 'code' or 'token'
-                  scope = req.query.scope, // optional
-                   type = req.query.type; // 'web_server'
+      var    client_id = req.query.client_id,
+          redirect_uri = req.query.redirect_uri;
 
       if(!client_id || !redirect_uri) {
         res.writeHead(400);
         return res.end('client_id and redirect_uri required');
       }
 
+      // authorization form will be POSTed to same URL, so we'll have all params
       var authorize_url = req.url;
 
       self.emit('enforce_login', req, res, authorize_url, function(user_id) {
@@ -83,6 +81,7 @@ OAuth2Provider.prototype.oauth = function() {
       var     client_id = req.query.client_id,
            redirect_uri = req.query.redirect_uri,
           response_type = req.query.response_type || 'code',
+                  state = req.query.state,
               x_user_id = req.query.x_user_id;
 
       var url = redirect_uri;
@@ -109,7 +108,15 @@ OAuth2Provider.prototype.oauth = function() {
           var code = serializer.randomString(128);
           self.emit('save_grant', req, client_id, code);
 
-          url += querystring.stringify({code: code});
+          var extras = {
+            code: code,
+          };
+
+          // pass back anti-CSRF opaque value
+          if(state)
+            extras['state'] = state;
+
+          url += querystring.stringify(extras);
         }
       } else if('deny' in req.body) {
         url += querystring.stringify({error: 'access_denied'});

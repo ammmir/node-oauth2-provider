@@ -1,6 +1,6 @@
 {
   "name": "oauth2-provider",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "A simple customizable OAuth 2.0 provider (server) for node.js.",
   "homepage": "https://github.com/ammmir/node-oauth2-provider",
   "author": {

@@ -103,6 +103,8 @@ OAuth2Provider.prototype.oauth = function() {
           try {
             user_id = self.serializer.parse(x_user_id);
           } catch(e) {
+            console.error('allow/token error', e.stack);
+
             res.writeHead(500);
             return res.end(e.message);
           }

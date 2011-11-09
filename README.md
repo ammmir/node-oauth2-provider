@@ -1,6 +1,12 @@
-# OAuth 2 Provider for node.js
+# OAuth 2 Provider for Connect & Express
 
-Supports both server-side (code) and client-side (token) OAuth flows.
+This is a node.js module for implementing OAuth2 servers (providers)
+that support server-side (code) and client-side (token) OAuth flows.
+
+It's very customizable, so you can (and currently, must) take care of
+OAuth token storage and client lists. In the future, a Mongo or Redis
+backed abstraction will be provided so you don't need to care about
+any kind of storage at all.
 
 ## Quick Start
 

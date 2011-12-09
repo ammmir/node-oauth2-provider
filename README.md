@@ -1,5 +1,11 @@
 # OAuth 2 Provider for Connect & Express
 
+WARNING: If you're using this module via npm, be sure to use a specific
+version in your `package.json` since until this module reaches 1.x there
+will be breaking changes in both npm and master. Stable releases are
+tagged on GitHub, so use those versions to pull down a specific one from
+npm.
+
 This is a node.js module for implementing OAuth2 servers (providers)
 that support server-side (code) and client-side (token) OAuth flows.
 

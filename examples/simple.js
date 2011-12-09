@@ -68,9 +68,16 @@ myOAP.on('create_access_token', function(user_id, client_id, next) {
 });
 
 // an access token was received in a URL query string parameter or HTTP header
-myOAP.on('access_token', function(req, user_id, client_id, data, next) {
-  req.session.user = user_id;
-  req.session.data = data;
+myOAP.on('access_token', function(req, token, next) {
+  var TOKEN_TTL = 10 * 60 * 1000; // 10 minutes
+
+  if(token.grant_date.getTime() + TOKEN_TTL > Date.now()) {
+    req.session.user = token.user_id;
+    req.session.data = token.extra_data;
+  } else {
+    console.warn('access token for user %s has expired', token.user_id);
+  }
+
   next();
 });
 

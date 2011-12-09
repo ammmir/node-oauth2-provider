@@ -43,14 +43,19 @@ OAuth2Provider.prototype.login = function() {
       data = self.serializer.parse(atok);
       user_id = data[0];
       client_id = data[1];
-      grant_date = data[2];
+      grant_date = new Date(data[2]);
       extra_data = data[3];
     } catch(e) {
       res.writeHead(400);
       return res.end(e.message);
     }
 
-    self.emit('access_token', req, user_id, client_id, extra_data, next);
+    self.emit('access_token', req, {
+      user_id: user_id,
+      client_id: client_id,
+      extra_data: extra_data,
+      grant_date: grant_date
+    }, next);
   };
 };
 

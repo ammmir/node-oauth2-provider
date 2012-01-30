@@ -40,7 +40,7 @@ myOAP.on('save_grant', function(req, client_id, code, next) {
 });
 
 // remove the grant when the access token has been sent
-myOAP.on('remove_grant', function(req, user_id, client_id, code) {
+myOAP.on('remove_grant', function(user_id, client_id, code) {
   if(myGrants[user_id] && myGrants[user_id][client_id])
     delete myGrants[user_id][client_id];
 });

@@ -161,7 +161,9 @@ OAuth2Provider.prototype.oauth = function() {
         res.writeHead(200, {'Content-type': 'application/json'});
 
         self.emit('create_access_token', user_id, client_id, function(extra_data) {
-          res.end(JSON.stringify(self.generateAccessToken(user_id, client_id, extra_data)));
+          var token = self.generateAccessToken(user_id, client_id, extra_data);
+          self.emit('save_access_token', user_id, client_id, token);
+          res.end(JSON.stringify(token));
         });
 
         self.emit('remove_grant', user_id, client_id, code);

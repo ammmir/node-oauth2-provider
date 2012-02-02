@@ -12,6 +12,9 @@ var myClients = {
 // temporary grant storage
 var myGrants = {};
 
+// temporary token storage
+var myTokens = {};
+
 var myOAP = new OAuth2Provider('encryption secret', 'signing secret');
 
 // before showing authorization page, make sure the user is logged in
@@ -65,6 +68,14 @@ myOAP.on('create_access_token', function(user_id, client_id, next) {
   var data = 'blah'; // can be any data type or null
 
   next(data);
+});
+
+// if you want to keep track of your access tokens, you can save them somewhere here
+myOAP.on('save_access_token', function(user_id, client_id, token) {
+  tokens[token] = {
+    user_id: user_id,
+    client_id: client_id
+  }
 });
 
 // an access token was received in a URL query string parameter or HTTP header

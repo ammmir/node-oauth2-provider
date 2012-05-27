@@ -8,7 +8,7 @@
 var EventEmitter = require('events').EventEmitter,
      querystring = require('querystring'),
       serializer = require('serializer'),
-         connect = require('connect');
+   connectRouter = require('connect_router');
 
 function OAuth2Provider(crypt_key, sign_key) {
   this.serializer = serializer.createSecureSerializer(crypt_key, sign_key);
@@ -62,7 +62,7 @@ OAuth2Provider.prototype.login = function() {
 OAuth2Provider.prototype.oauth = function() {
   var self = this;
 
-  return connect.router(function(app) {
+  return connectRouter(function(app) {
     app.get('/oauth/authorize', function(req, res, next) {
       var    client_id = req.query.client_id,
           redirect_uri = req.query.redirect_uri;

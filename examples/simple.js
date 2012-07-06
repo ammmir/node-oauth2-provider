@@ -67,6 +67,11 @@ myOAP.on('create_access_token', function(user_id, client_id, next) {
   next(data);
 });
 
+// (optional) do something with the generated access token
+myOAP.on('save_access_token', function(user_id, client_id, access_token) {
+  console.log('saving access token %s for user_id=%s client_id=%s', access_token, user_id, client_id);
+});
+
 // an access token was received in a URL query string parameter or HTTP header
 myOAP.on('access_token', function(req, token, next) {
   var TOKEN_TTL = 10 * 60 * 1000; // 10 minutes

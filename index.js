@@ -116,7 +116,12 @@ OAuth2Provider.prototype.oauth = function() {
           }
 
           self.emit('create_access_token', user_id, client_id, function(extra_data) {
-            url += querystring.stringify(self.generateAccessToken(user_id, client_id, extra_data));
+            var atok = self.generateAccessToken(user_id, client_id, extra_data);
+
+            if(self.listeners('save_access_token').length > 0)
+              self.emit('save_access_token', user_id, client_id, atok);
+
+            url += querystring.stringify(atok);
 
             res.writeHead(303, {Location: url});
             res.end();
@@ -161,6 +166,11 @@ OAuth2Provider.prototype.oauth = function() {
         res.writeHead(200, {'Content-type': 'application/json'});
 
         self.emit('create_access_token', user_id, client_id, function(extra_data) {
+          var atok = self.generateAccessToken(user_id, client_id, extra_data);
+
+          if(self.listeners('save_access_token').length > 0)
+            self.emit('save_access_token', user_id, client_id, atok);
+
           res.end(JSON.stringify(self.generateAccessToken(user_id, client_id, extra_data)));
         });
 

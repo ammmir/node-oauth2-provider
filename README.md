@@ -37,4 +37,14 @@ support both cookie-authenticated and OAuth access to protected URLs, you
 could populate `req.session.user` so that individual URLs don't need to
 care about which type of authentication was used.
 
-See examples/simple.js for how to use it.
+## Example
+
+In the root directory, run `npm install express` and then run:
+
+    node examples/simple.js
+
+Visit <http://localhost:8081/login> to gain access to
+<http://localhost:8081/secret> or use OAuth to obtain an access token as a code (default) or a token (in the URL hash):
+
+  - code: <http://localhost:8081/oauth/authorize?client_id=foo&redirect_uri=http://myapp.foo/>
+  - token: <http://localhost:8081/oauth/authorize?client_id=foo&redirect_uri=http://myapp.foo/&response_type=token>

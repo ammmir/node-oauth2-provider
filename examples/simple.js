@@ -1,8 +1,8 @@
 // simple server with a protected resource at /secret secured by OAuth 2
 
 var OAuth2Provider = require('../index').OAuth2Provider,
-           connect = require('connect'),
-       MemoryStore = connect.session.MemoryStore;
+           express = require('express'),
+       MemoryStore = express.session.MemoryStore;
 
 // hardcoded list of <client id, client secret> tuples
 var myClients = {
@@ -121,15 +121,15 @@ function router(app) {
   });
 }
 
-connect.createServer(
-  connect.logger(),
-  connect.bodyParser(),
-  connect.query(),
-  connect.cookieParser(),
-  connect.session({store: new MemoryStore({reapInterval: 5 * 60 * 1000}), secret: 'abracadabra'}),
+express.createServer(
+  express.logger(),
+  express.bodyParser(),
+  express.query(),
+  express.cookieParser(),
+  express.session({store: new MemoryStore({reapInterval: 5 * 60 * 1000}), secret: 'abracadabra'}),
   myOAP.oauth(),
   myOAP.login(),
-  connect.router(router)
+  express.router(router)
 ).listen(8081);
 
 function escape_entities(s) {

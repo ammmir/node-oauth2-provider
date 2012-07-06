@@ -62,8 +62,10 @@ OAuth2Provider.prototype.login = function() {
 OAuth2Provider.prototype.oauth = function() {
   var self = this;
 
-  return connect.router(function(app) {
-    app.get('/oauth/authorize', function(req, res, next) {
+  return function(req, res, next) {
+    var uri = ~req.url.indexOf('?') ? req.url.substr(0, req.url.indexOf('?')) : req.url;
+
+    if(req.method == 'GET' && '/oauth/authorize' == uri) {
       var    client_id = req.query.client_id,
           redirect_uri = req.query.redirect_uri;
 
@@ -82,9 +84,8 @@ OAuth2Provider.prototype.oauth = function() {
         // user is logged in, render approval page
         self.emit('authorize_form', req, res, client_id, authorize_url);
       });
-    });
 
-    app.post('/oauth/authorize', function(req, res, next) {
+    } else if(req.method == 'POST' && '/oauth/authorize' == uri) {
       var     client_id = req.query.client_id,
            redirect_uri = req.query.redirect_uri,
           response_type = req.query.response_type || 'code',
@@ -144,9 +145,8 @@ OAuth2Provider.prototype.oauth = function() {
         res.writeHead(303, {Location: url});
         res.end();
       }
-    });
 
-    app.post('/oauth/access_token', function(req, res, next) {
+    } else if(req.method == 'POST' && '/oauth/access_token' == uri) {
       var     client_id = req.body.client_id,
           client_secret = req.body.client_secret,
            redirect_uri = req.body.redirect_uri,
@@ -166,8 +166,11 @@ OAuth2Provider.prototype.oauth = function() {
 
         self.emit('remove_grant', user_id, client_id, code);
       });
-    });
-  });
+
+    } else {
+      return next();
+    }
+  };
 };
 
 exports.OAuth2Provider = OAuth2Provider;

@@ -46,5 +46,5 @@ In the root directory, run `npm install express` and then run:
 Visit <http://localhost:8081/login> to gain access to
 <http://localhost:8081/secret> or use OAuth to obtain an access token as a code (default) or a token (in the URL hash):
 
-  - code: <http://localhost:8081/oauth/authorize?client_id=foo&redirect_uri=http://myapp.foo/>
-  - token: <http://localhost:8081/oauth/authorize?client_id=foo&redirect_uri=http://myapp.foo/&response_type=token>
+  - code: <http://localhost:8081/oauth/authorize?client_id=1&redirect_uri=http://myapp.foo/>
+  - token: <http://localhost:8081/oauth/authorize?client_id=1&redirect_uri=http://myapp.foo/&response_type=token>

@@ -15,13 +15,14 @@ describe('OAuth2Provider', function(){
       var crypt_key = '123131',
         sign_key = 'asdfasdfas';
 
-      // stub returned serializer so that can mock it
-      this.stubSerializer = {
-        parse : sinon.stub()
-      };
+      // create parse stub that will be used to parse incoming requests
+      this.parseStub = sinon.stub();
 
+      // stub method to return object that has parseStub for parser
       this.createSerializerStub = sinon.stub(serializer, 'createSecureSerializer');
-      this.createSerializerStub.withArgs(crypt_key, sign_key).returns(this.stubSerializer);
+      this.createSerializerStub.withArgs(crypt_key, sign_key).returns({
+        parse : this.parseStub
+      });
 
       this.oAuth2Provider = createOauth2Provider();
     });
@@ -40,9 +41,10 @@ describe('OAuth2Provider', function(){
         dateString = '01/05/2012',
         extra_data = 'wadfasdfasfasdfas';
 
+      // below data result from serialization
       var expectedParsedData = [user_id, client_id, dateString, extra_data];
       // setup serializer so that returns above data for that access token
-      this.stubSerializer.parse.withArgs(access_token).returns(expectedParsedData);
+      this.parseStub.withArgs(access_token).returns(expectedParsedData);
 
       this.oAuth2Provider.emit = sinon.spy();
 
@@ -77,7 +79,7 @@ describe('OAuth2Provider', function(){
       var errorMessage = 'could not parse data',
         access_token = '123412341234124312341234';
       // change serializer to throw an error with the access token
-      this.stubSerializer.parse.withArgs(access_token).throws({ message : errorMessage});
+      this.parseStub.withArgs(access_token).throws({ message : errorMessage});
 
       var req = {
         query : {

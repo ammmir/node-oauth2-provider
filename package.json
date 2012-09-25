@@ -9,8 +9,7 @@
   },
   "main": "index",
   "dependencies": {
-    "serializer": ">=0.0.2 <0.1.0",
-    "connect": "2.3.x"
+    "serializer": ">=0.0.2 <0.1.0"
   },
   "licenses": [
     {

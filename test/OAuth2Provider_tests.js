@@ -2,13 +2,9 @@ var sinon = require('sinon'),
   should = require('chai').should(),
   serializer = require('serializer');
 
-describe('OAuth2Provider', function(){
-  // it('should inherit from EventEmitter', function(){
-  //   // secure serializer
-  //   var oAuth2Provider = createOauth2Provider();
+var module = require('../index');
 
-  //   oAuth2Provider.should.be.an('EventEmitter');
-  // });
+describe('OAuth2Provider', function(){
 
   describe('login', function(){
     beforeEach(function(){
@@ -49,7 +45,7 @@ describe('OAuth2Provider', function(){
       this.oAuth2Provider.emit = sinon.spy();
 
       // TEST
-      // build arguments that are verified
+      // build arguments that are passed to middleware function
       var req = {
         query : {
           'access_token' : access_token  
@@ -92,7 +88,7 @@ describe('OAuth2Provider', function(){
       };
 
       // TEST
-      // get login middle ware function, and invoke it with above arguments
+      // get login middleware function, and invoke it with above arguments
       var middlewareFunction = this.oAuth2Provider.login();
       middlewareFunction(req, res);  
 
@@ -101,16 +97,14 @@ describe('OAuth2Provider', function(){
       res.end.calledWith(errorMessage).should.be.ok;
     });
   });
-
-  // utility methods
-  var createOauth2Provider = function(crypt_key, sign_key){
-    var crypt_key = crypt_key || '123131',
-      sign_key = sign_key || 'asdfasdfas';
-
-    // requiring this needs module needs to be done repeatedly, since it depends on a static serializer
-    // factory in its static constructuro, which needs to be stubbed by many of the methods
-    var module = require('../index'),
-      oAuth2Provider = new module.OAuth2Provider(crypt_key, sign_key);
-    return oAuth2Provider;
-  };
 });
+
+
+
+// utility methods
+var createOauth2Provider = function(crypt_key, sign_key){
+  var crypt_key = crypt_key || '123131',
+    sign_key = sign_key || 'asdfasdfas';
+
+  return new module.OAuth2Provider(crypt_key, sign_key);
+};

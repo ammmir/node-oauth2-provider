@@ -7,8 +7,7 @@
 
 var EventEmitter = require('events').EventEmitter,
      querystring = require('querystring'),
-      serializer = require('serializer'),
-         connect = require('connect');
+      serializer = require('serializer');
 
 function OAuth2Provider(crypt_key, sign_key) {
   this.serializer = serializer.createSecureSerializer(crypt_key, sign_key);

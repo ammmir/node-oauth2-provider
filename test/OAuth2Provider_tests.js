@@ -31,7 +31,7 @@ describe('OAuth2Provider', function(){
     var accessTokenKey = 'access_token';
       // for backwards compatibility
 
-    it('should return function that emits access_token if it can be parsed from request', function(){
+    it('should return function that emits access_token event with parsed user data if token can be parsed from request', function(){
       // SETUP
       var access_token = '123412341234124312341234';
 

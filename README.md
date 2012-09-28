@@ -37,6 +37,16 @@ support both cookie-authenticated and OAuth access to protected URLs, you
 could populate `req.session.user` so that individual URLs don't need to
 care about which type of authentication was used.
 
+## Running tests
+
+  Install dev dependencies:
+  
+    $ npm install -d
+
+  Run the tests:
+
+    $ make test
+
 ## Example
 
 In the root directory, run `npm install express` and then run:

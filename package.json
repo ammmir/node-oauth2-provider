@@ -1,6 +1,6 @@
 {
   "name": "oauth2-provider",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "A simple customizable OAuth 2.0 provider (server) for node.js.",
   "homepage": "https://github.com/ammmir/node-oauth2-provider",
   "author": {
@@ -10,6 +10,11 @@
   "main": "index",
   "dependencies": {
     "serializer": ">=0.0.2 <0.1.0"
+  },
+  "devDependencies": {
+    "mocha" : "1.0.3"
+    ,"sinon" : "1.3.4"
+    ,"chai" : "1.0.3"
   },
   "licenses": [
     {

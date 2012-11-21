@@ -15,7 +15,7 @@ version in your app's `package.json` file. Major versions may have an
 incompatible API that's not backwards-compatible, so use a safe version
 range under `dependencies` (eg. for version 1.x):
 
-    "oauth2-provider": ">=1.0.0 <2.0.0"
+    "oauth2-provider": "1.x"
 
 ## Quick Start
 
@@ -51,7 +51,7 @@ care about which type of authentication was used.
 
 In the root directory, run `npm install express` and then run:
 
-    node examples/simple.js
+    node examples/simple_express3.js
 
 Visit <http://localhost:8081/login> to gain access to
 <http://localhost:8081/secret> or use OAuth to obtain an access token as a code (default) or a token (in the URL hash):

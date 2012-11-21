@@ -12,7 +12,7 @@ var myClients = {
 // temporary grant storage
 var myGrants = {};
 
-var myOAP = new OAuth2Provider('encryption secret', 'signing secret');
+var myOAP = new OAuth2Provider({crypt_key: 'encryption secret', sign_key: 'signing secret'});
 
 // before showing authorization page, make sure the user is logged in
 myOAP.on('enforce_login', function(req, res, authorize_url, next) {

@@ -9,8 +9,21 @@ var EventEmitter = require('events').EventEmitter,
      querystring = require('querystring'),
       serializer = require('serializer');
 
-function OAuth2Provider(crypt_key, sign_key) {
-  this.serializer = serializer.createSecureSerializer(crypt_key, sign_key);
+function OAuth2Provider(options) {
+  if(arguments.length != 1) {
+    console.warn('OAuth2Provider(crypt_key, sign_key) constructor has been deprecated, yo.');
+
+    options = {
+      crypt_key: arguments[0],
+      sign_key: arguments[1],
+    };
+  }
+
+  options['authorize_uri'] = options['authorize_uri'] || '/oauth/authorize';
+  options['access_token_uri'] = options['access_token_uri'] || '/oauth/access_token';
+
+  this.options = options;
+  this.serializer = serializer.createSecureSerializer(this.options.crypt_key, this.options.sign_key);
 }
 
 OAuth2Provider.prototype = new EventEmitter();
@@ -64,7 +77,7 @@ OAuth2Provider.prototype.oauth = function() {
   return function(req, res, next) {
     var uri = ~req.url.indexOf('?') ? req.url.substr(0, req.url.indexOf('?')) : req.url;
 
-    if(req.method == 'GET' && '/oauth/authorize' == uri) {
+    if(req.method == 'GET' && self.options.authorize_uri == uri) {
       var    client_id = req.query.client_id,
           redirect_uri = req.query.redirect_uri;
 
@@ -84,7 +97,7 @@ OAuth2Provider.prototype.oauth = function() {
         self.emit('authorize_form', req, res, client_id, authorize_url);
       });
 
-    } else if(req.method == 'POST' && '/oauth/authorize' == uri) {
+    } else if(req.method == 'POST' && self.options.authorize_uri == uri) {
       var     client_id = req.query.client_id,
            redirect_uri = req.query.redirect_uri,
           response_type = req.query.response_type || 'code',
@@ -150,7 +163,7 @@ OAuth2Provider.prototype.oauth = function() {
         res.end();
       }
 
-    } else if(req.method == 'POST' && '/oauth/access_token' == uri) {
+    } else if(req.method == 'POST' && self.options.access_token_uri == uri) {
       var     client_id = req.body.client_id,
           client_secret = req.body.client_secret,
            redirect_uri = req.body.redirect_uri,

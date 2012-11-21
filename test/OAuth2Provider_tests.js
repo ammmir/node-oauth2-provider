@@ -106,5 +106,5 @@ var createOauth2Provider = function(crypt_key, sign_key){
   var crypt_key = crypt_key || '123131',
     sign_key = sign_key || 'asdfasdfas';
 
-  return new module.OAuth2Provider(crypt_key, sign_key);
+  return new module.OAuth2Provider({crypt_key: crypt_key, sign_key: sign_key});
 };

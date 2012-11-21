@@ -170,7 +170,7 @@ OAuth2Provider.prototype.oauth = function() {
           if(self.listeners('save_access_token').length > 0)
             self.emit('save_access_token', user_id, client_id, atok);
 
-          res.end(JSON.stringify(self.generateAccessToken(user_id, client_id, extra_data)));
+          res.end(JSON.stringify(atok));
         });
 
         self.emit('remove_grant', user_id, client_id, code);

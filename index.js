@@ -47,6 +47,7 @@ function OAuth2Provider(options) {
   this.serializer = serializer.createSecureSerializer(this.options.crypt_key, this.options.sign_key);
 }
 
+
 OAuth2Provider.prototype = new EventEmitter();
 
 OAuth2Provider.prototype.generateAccessToken = function(user_id, client_id, extra_data) {
@@ -119,11 +120,11 @@ OAuth2Provider.prototype.oauth = function() {
       });
 
     } else if(req.method == 'POST' && self.options.authorize_uri == uri) {
-      var     client_id = req.query.client_id,
-           redirect_uri = req.query.redirect_uri,
-          response_type = req.query.response_type || 'code',
-                  state = req.query.state,
-              x_user_id = req.query.x_user_id;
+      var     client_id = req.body.client_id,
+           redirect_uri = req.body.redirect_uri,
+          response_type = req.body.response_type || 'code',
+                  state = req.body.state,
+              x_user_id = req.body.x_user_id;
 
       var url = redirect_uri;
 

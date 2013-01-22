@@ -9,6 +9,27 @@ var EventEmitter = require('events').EventEmitter,
      querystring = require('querystring'),
       serializer = require('serializer');
 
+function parse_authorization(authorization) {
+  if(!authorization)
+    return null;
+
+  var parts = authorization.split(' ');
+
+  if(parts.length != 2 || parts[0] != 'Basic')
+    return null;
+
+  var creds = new Buffer(parts[1], 'base64').toString(),
+          i = creds.indexOf(':');
+
+  if(i == -1)
+    return null;
+
+  var username = creds.slice(0, i);
+      password = creds.slice(i + 1);
+
+  return(username, password);
+}
+
 function OAuth2Provider(options) {
   if(arguments.length != 1) {
     console.warn('OAuth2Provider(crypt_key, sign_key) constructor has been deprecated, yo.');
@@ -169,30 +190,70 @@ OAuth2Provider.prototype.oauth = function() {
            redirect_uri = req.body.redirect_uri,
                    code = req.body.code;
 
-      self.emit('lookup_grant', client_id, client_secret, code, function(err, user_id) {
-        if(err) {
+      if(!client_id || !client_secret) {
+        var authorization = parse_authorization(req.headers.authorization);
+
+        if(!authorization) {
           res.writeHead(400);
-          return res.end(err.message);
+          return res.end('client_id and client_secret required');
         }
 
-        res.writeHead(200, {'Content-type': 'application/json'});
+        client_id = authorization[0];
+        client_secret = authorization[1];
+      }
 
-        self.emit('create_access_token', user_id, client_id, function(extra_data) {
-          var atok = self.generateAccessToken(user_id, client_id, extra_data);
+      if('password' == req.body.grant_type) {
+        if(self.listeners('client_auth').length == 0) {
+          res.writeHead(401);
+          return res.end('client authentication not supported');
+        }
 
-          if(self.listeners('save_access_token').length > 0)
-            self.emit('save_access_token', user_id, client_id, atok);
+        self.emit('client_auth', client_id, client_secret, req.body.username, req.body.password, function(err, user_id) {
+          if(err) {
+            res.writeHead(401);
+            return res.end(err.message);
+          }
 
-          res.end(JSON.stringify(atok));
+          res.writeHead(200, {'Content-type': 'application/json'});
+
+          self._createAccessToken(user_id, client_id, function(atok) {
+            res.end(JSON.stringify(atok));
+          });
         });
+      } else {
+        self.emit('lookup_grant', client_id, client_secret, code, function(err, user_id) {
+          if(err) {
+            res.writeHead(400);
+            return res.end(err.message);
+          }
 
-        self.emit('remove_grant', user_id, client_id, code);
-      });
+          res.writeHead(200, {'Content-type': 'application/json'});
+
+          self._createAccessToken(user_id, client_id, function(atok) {
+            self.emit('remove_grant', user_id, client_id, code);
+
+            res.end(JSON.stringify(atok));
+          });
+        });
+      }
 
     } else {
       return next();
     }
   };
+};
+
+OAuth2Provider.prototype._createAccessToken = function(user_id, client_id, cb) {
+  var self = this;
+
+  this.emit('create_access_token', user_id, client_id, function(extra_data) {
+    var atok = self.generateAccessToken(user_id, client_id, extra_data);
+
+    if(self.listeners('save_access_token').length > 0)
+      self.emit('save_access_token', user_id, client_id, atok);
+
+    return cb(atok);
+  });
 };
 
 exports.OAuth2Provider = OAuth2Provider;

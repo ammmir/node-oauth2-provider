@@ -88,6 +88,17 @@ myOAP.on('access_token', function(req, token, next) {
   next();
 });
 
+// (optional) client authentication (xAuth) for trusted clients
+myOAP.on('client_auth', function(client_id, client_secret, username, password, next) {
+  if(client_id == '1' && username == 'guest') {
+    var user_id = '1337';
+
+    return next(null, user_id);
+  }
+
+  return next(new Error('client authentication denied'));
+});
+
 app.use(express.logger());
 app.use(express.bodyParser());
 app.use(express.query());

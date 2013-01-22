@@ -37,15 +37,9 @@ support both cookie-authenticated and OAuth access to protected URLs, you
 could populate `req.session.user` so that individual URLs don't need to
 care about which type of authentication was used.
 
-## Running tests
-
-  Install dev dependencies:
-  
-    $ npm install -d
-
-  Run the tests:
-
-    $ make test
+To support client authentication (sometimes known as xAuth) for trusted
+clients, handle the `client_auth` event to exchange a username and password
+for an access token. See `examples/simple_express3.js`.
 
 ## Example
 
@@ -58,3 +52,13 @@ Visit <http://localhost:8081/login> to gain access to
 
   - code: <http://localhost:8081/oauth/authorize?client_id=1&redirect_uri=http://myapp.foo/>
   - token: <http://localhost:8081/oauth/authorize?client_id=1&redirect_uri=http://myapp.foo/&response_type=token>
+
+## Running tests
+
+  Install dev dependencies:
+  
+    $ npm install -d
+
+  Run the tests:
+
+    $ make test

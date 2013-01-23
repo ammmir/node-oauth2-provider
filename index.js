@@ -27,7 +27,7 @@ function parse_authorization(authorization) {
   var username = creds.slice(0, i);
       password = creds.slice(i + 1);
 
-  return(username, password);
+  return [username, password];
 }
 
 function OAuth2Provider(options) {

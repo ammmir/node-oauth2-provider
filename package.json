@@ -9,7 +9,8 @@
   },
   "main": "index",
   "dependencies": {
-    "serializer": ">=0.0.2 <0.1.0"
+    "serializer": ">=0.0.2 <0.1.0",
+    "underscore": "1.4.4"
   },
   "devDependencies": {
     "mocha" : "1.0.3"

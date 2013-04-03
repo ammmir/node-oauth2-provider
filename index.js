@@ -7,7 +7,8 @@
 
 var EventEmitter = require('events').EventEmitter,
      querystring = require('querystring'),
-      serializer = require('serializer');
+      serializer = require('serializer'),
+      _ = require('underscore');
 
 function parse_authorization(authorization) {
   if(!authorization)
@@ -49,12 +50,12 @@ function OAuth2Provider(options) {
 
 OAuth2Provider.prototype = new EventEmitter();
 
-OAuth2Provider.prototype.generateAccessToken = function(user_id, client_id, extra_data) {
-  var out = {
+OAuth2Provider.prototype.generateAccessToken = function(user_id, client_id, extra_data, token_options) {
+  token_options = token_options || {}
+  var out = _.extend(token_options, {
     access_token: this.serializer.stringify([user_id, client_id, +new Date, extra_data]),
     refresh_token: null,
-  };
-
+  });
   return out;
 };
 
@@ -148,8 +149,8 @@ OAuth2Provider.prototype.oauth = function() {
             return res.end(e.message);
           }
 
-          self.emit('create_access_token', user_id, client_id, function(extra_data) {
-            var atok = self.generateAccessToken(user_id, client_id, extra_data);
+          self.emit('create_access_token', user_id, client_id, function(extra_data,token_options) {
+            var atok = self.generateAccessToken(user_id, client_id, extra_data, token_options);
 
             if(self.listeners('save_access_token').length > 0)
               self.emit('save_access_token', user_id, client_id, atok);
@@ -246,8 +247,8 @@ OAuth2Provider.prototype.oauth = function() {
 OAuth2Provider.prototype._createAccessToken = function(user_id, client_id, cb) {
   var self = this;
 
-  this.emit('create_access_token', user_id, client_id, function(extra_data) {
-    var atok = self.generateAccessToken(user_id, client_id, extra_data);
+  this.emit('create_access_token', user_id, client_id, function(extra_data, token_options) {
+    var atok = self.generateAccessToken(user_id, client_id, extra_data, token_options);
 
     if(self.listeners('save_access_token').length > 0)
       self.emit('save_access_token', user_id, client_id, atok);

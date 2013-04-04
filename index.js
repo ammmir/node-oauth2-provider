@@ -9,6 +9,27 @@ var EventEmitter = require('events').EventEmitter,
      querystring = require('querystring'),
       serializer = require('serializer');
 
+_extend = function(dst,src) {
+
+  var srcs = [];
+  if ( typeof(src) == 'object' ) {
+    srcs.push(src);
+  } else if ( typeof(src) == 'array' ) {
+    for (var i = src.length - 1; i >= 0; i--) {
+      srcs.push(this._extend({},src[i]))
+    };
+  } else {
+    throw new Error("Invalid argument")
+  }
+
+  for (var i = srcs.length - 1; i >= 0; i--) {
+    for (var key in srcs[i]) {
+      dst[key] = srcs[i][key];
+    }
+  };
+
+  return dst;
+}
 function parse_authorization(authorization) {
   if(!authorization)
     return null;
@@ -49,12 +70,12 @@ function OAuth2Provider(options) {
 
 OAuth2Provider.prototype = new EventEmitter();
 
-OAuth2Provider.prototype.generateAccessToken = function(user_id, client_id, extra_data) {
-  var out = {
+OAuth2Provider.prototype.generateAccessToken = function(user_id, client_id, extra_data, token_options) {
+  token_options = token_options || {}
+  var out = _extend(token_options, {
     access_token: this.serializer.stringify([user_id, client_id, +new Date, extra_data]),
     refresh_token: null,
-  };
-
+  });
   return out;
 };
 
@@ -148,8 +169,8 @@ OAuth2Provider.prototype.oauth = function() {
             return res.end(e.message);
           }
 
-          self.emit('create_access_token', user_id, client_id, function(extra_data) {
-            var atok = self.generateAccessToken(user_id, client_id, extra_data);
+          self.emit('create_access_token', user_id, client_id, function(extra_data,token_options) {
+            var atok = self.generateAccessToken(user_id, client_id, extra_data, token_options);
 
             if(self.listeners('save_access_token').length > 0)
               self.emit('save_access_token', user_id, client_id, atok);
@@ -246,8 +267,8 @@ OAuth2Provider.prototype.oauth = function() {
 OAuth2Provider.prototype._createAccessToken = function(user_id, client_id, cb) {
   var self = this;
 
-  this.emit('create_access_token', user_id, client_id, function(extra_data) {
-    var atok = self.generateAccessToken(user_id, client_id, extra_data);
+  this.emit('create_access_token', user_id, client_id, function(extra_data, token_options) {
+    var atok = self.generateAccessToken(user_id, client_id, extra_data, token_options);
 
     if(self.listeners('save_access_token').length > 0)
       self.emit('save_access_token', user_id, client_id, atok);

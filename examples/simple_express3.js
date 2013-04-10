@@ -64,14 +64,15 @@ myOAP.on('lookup_grant', function(client_id, client_secret, code, next) {
 
 // embed an opaque value in the generated access token
 myOAP.on('create_access_token', function(user_id, client_id, next) {
-  var data = 'blah'; // can be any data type or null
+  var extra_data = 'blah'; // can be any data type or null
+  //var oauth_params = {token_type: 'bearer'};
 
-  next(data);
+  next(extra_data/*, oauth_params*/);
 });
 
 // (optional) do something with the generated access token
 myOAP.on('save_access_token', function(user_id, client_id, access_token) {
-  console.log('saving access token %s for user_id=%s client_id=%s', access_token, user_id, client_id);
+  console.log('saving access token %s for user_id=%s client_id=%s', JSON.stringify(access_token), user_id, client_id);
 });
 
 // an access token was received in a URL query string parameter or HTTP header
@@ -99,7 +100,7 @@ myOAP.on('client_auth', function(client_id, client_secret, username, password, n
   return next(new Error('client authentication denied'));
 });
 
-app.use(express.logger());
+app.use(express.logger('dev'));
 app.use(express.bodyParser());
 app.use(express.query());
 app.use(express.cookieParser());

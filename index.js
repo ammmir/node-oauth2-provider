@@ -64,8 +64,8 @@ OAuth2Provider.prototype.login = function() {
   return function(req, res, next) {
     var data, atok, user_id, client_id, grant_date, extra_data;
 
-    if(req.query['access_token']) {
-      atok = req.query['access_token'];
+    if(req.query['access_token'] || req.body['access_token']) {
+      atok = req.query['access_token'] || req.body['access_token'];
     } else if((req.headers['authorization'] || '').indexOf('Bearer ') == 0) {
       atok = req.headers['authorization'].replace('Bearer', '').trim();
     } else {

@@ -114,76 +114,93 @@ OAuth2Provider.prototype.oauth = function() {
         // store user_id in an HMAC-protected encrypted query param
         authorize_url += '&' + querystring.stringify({x_user_id: self.serializer.stringify(user_id)});
 
-        // user is logged in, render approval page
-        self.emit('authorize_form', req, res, client_id, authorize_url);
+        self.emit('before_authorize_form', req, res, function() {
+            self.emit('authorize_form', req, res, client_id, authorize_url);
+        },function(){
+            var code = serializer.randomString(128);
+            self.emit('save_grant', req, client_id, code, function() {
+                var extras = {
+                    code: code,
+                };
+                var url = redirect_uri;
+                url += '?';
+                // pass back anti-CSRF opaque value
+                if (state) extras['state'] = state;
+                url += querystring.stringify(extras);
+                res.writeHead(303, {
+                    Location: url
+                });
+                res.end();
+            });
+        });
       });
 
     } else if(req.method == 'POST' && self.options.authorize_uri == uri) {
-      var     client_id = (req.query.client_id || req.body.client_id),
-           redirect_uri = (req.query.redirect_uri || req.body.redirect_uri),
-          response_type = (req.query.response_type || req.body.response_type) || 'code',
-                  state = (req.query.state || req.body.state),
-              x_user_id = (req.query.x_user_id || req.body.x_user_id);
-
-      var url = redirect_uri;
-
-      switch(response_type) {
-        case 'code': url += '?'; break;
-        case 'token': url += '#'; break;
+        var client_id = (req.query.client_id || req.body.client_id),
+            redirect_uri = (req.query.redirect_uri || req.body.redirect_uri),
+            response_type = (req.query.response_type || req.body.response_type) || 'code',
+            state = (req.query.state || req.body.state),
+            x_user_id = (req.query.x_user_id || req.body.x_user_id);
+        var url = redirect_uri;
+        switch (response_type) {
+        case 'code':
+            url += '?';
+            break;
+        case 'token':
+            url += '#';
+            break;
         default:
-          res.writeHead(400);
-          return res.end('invalid response_type requested');
-      }
-
-      if('allow' in req.body) {
-        if('token' == response_type) {
-          var user_id;
-
-          try {
-            user_id = self.serializer.parse(x_user_id);
-          } catch(e) {
-            console.error('allow/token error', e.stack);
-
-            res.writeHead(500);
-            return res.end(e.message);
-          }
-
-          self.emit('create_access_token', user_id, client_id, function(extra_data) {
-            var atok = self.generateAccessToken(user_id, client_id, extra_data);
-
-            if(self.listeners('save_access_token').length > 0)
-              self.emit('save_access_token', user_id, client_id, atok);
-
-            url += querystring.stringify(atok);
-
-            res.writeHead(303, {Location: url});
-            res.end();
-          });
-        } else {
-          var code = serializer.randomString(128);
-
-          self.emit('save_grant', req, client_id, code, function() {
-            var extras = {
-              code: code,
-            };
-
-            // pass back anti-CSRF opaque value
-            if(state)
-              extras['state'] = state;
-
-            url += querystring.stringify(extras);
-
-            res.writeHead(303, {Location: url});
-            res.end();
-          });
+            res.writeHead(400);
+            return res.end('invalid response_type requested');
         }
-      } else {
-        url += querystring.stringify({error: 'access_denied'});
-
-        res.writeHead(303, {Location: url});
-        res.end();
-      }
-
+        if ('allow' in req.body) {
+            self.emit('after_authorize_form', req, res, client_id,function(){
+                if ('token' == response_type) {
+                    var user_id;
+                    try {
+                        user_id = self.serializer.parse(x_user_id);
+                    }
+                    catch (e) {
+                        console.error('allow/token error', e.stack);
+                        res.writeHead(500);
+                        return res.end(e.message);
+                    }
+                    self.emit('create_access_token', user_id, client_id, function(extra_data) {
+                        var atok = self.generateAccessToken(user_id, client_id, extra_data);
+                        if (self.listeners('save_access_token').length > 0) self.emit('save_access_token', user_id, client_id, atok);
+                        url += querystring.stringify(atok);
+                        res.writeHead(303, {
+                            Location: url
+                        });
+                        res.end();
+                    });
+                }
+                else {
+                    var code = serializer.randomString(128);
+                    self.emit('save_grant', req, client_id, code, function() {
+                        var extras = {
+                            code: code,
+                        };
+                        // pass back anti-CSRF opaque value
+                        if (state) extras['state'] = state;
+                        url += querystring.stringify(extras);
+                        res.writeHead(303, {
+                            Location: url
+                        });
+                        res.end();
+                    });
+                }
+            });
+        }
+        else {
+            url += querystring.stringify({
+                error: 'access_denied'
+            });
+            res.writeHead(303, {
+                Location: url
+            });
+            res.end();
+        }
     } else if(req.method == 'POST' && self.options.access_token_uri == uri) {
       var     client_id = req.body.client_id || req.query.client_id,
           client_secret = req.body.client_secret || req.query.client_secret,

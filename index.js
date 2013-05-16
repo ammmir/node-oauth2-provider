@@ -114,7 +114,7 @@ OAuth2Provider.prototype.oauth = function() {
         // store user_id in an HMAC-protected encrypted query param
         authorize_url += '&' + querystring.stringify({x_user_id: self.serializer.stringify(user_id)});
 
-        self.emit('before_authorize_form', req, res, function() {
+        self.emit('before_authorize_form', req, res,client_id, function() {
             self.emit('authorize_form', req, res, client_id, authorize_url);
         },function(){
             var code = serializer.randomString(128);

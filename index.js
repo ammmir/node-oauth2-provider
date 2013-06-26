@@ -7,7 +7,29 @@
 
 var EventEmitter = require('events').EventEmitter,
      querystring = require('querystring'),
-      serializer = require('serializer');
+      serializer = require('serializer'),
+      redis = require('redis').createClient(),
+      extend = require('extend'),
+      url = require('url');
+
+      
+var defaults = {
+  authorize_uri: '/authorize',
+  access_token_uri: '/access_token',
+  login_uri: '/login',
+  create_user_uri: '/create_user',
+  register_app_uri: '/register_app',
+  consent_uri: '/consent',
+  scopes: {
+    openid: 'Informs the Authorization Server that the Client is making an OpenID Connect request.', 
+    profile:'Access to the End-User\'s default profile Claims.', 
+    email: 'Access to the email and email_verified Claims.', 
+    address: 'Access to the address Claim.', 
+    phone: 'Access to the phone_number and phone_number_verified Claims.', 
+    offline_access: 'Grants access to the End-User\'s UserInfo Endpoint even when the End-User is not present (not logged in).'
+  },
+  redis_prefix: 'openid:connect:'
+};
 
 _extend = function(dst,src) {
 
@@ -51,35 +73,223 @@ function parse_authorization(authorization) {
   return [username, password];
 }
 
-function OAuth2Provider(options) {
-  if(arguments.length != 1) {
-    console.warn('OAuth2Provider(crypt_key, sign_key) constructor has been deprecated, yo.');
-
-    options = {
-      crypt_key: arguments[0],
-      sign_key: arguments[1],
-    };
-  }
-
-  options['authorize_uri'] = options['authorize_uri'] || '/oauth/authorize';
-  options['access_token_uri'] = options['access_token_uri'] || '/oauth/access_token';
-
-  this.options = options;
+function OpenIDConnect(options) {
+  this.options = extend(true, {}, options, defaults);
   this.serializer = serializer.createSecureSerializer(this.options.crypt_key, this.options.sign_key);
 }
 
-OAuth2Provider.prototype = new EventEmitter();
+OpenIDConnect.prototype = new EventEmitter();
 
-OAuth2Provider.prototype.generateAccessToken = function(user_id, client_id, extra_data, token_options) {
-  token_options = token_options || {}
-  var out = _extend(token_options, {
+OpenIDConnect.prototype.generateAccessToken = function(user_id, client_id, extra_data, token_options) {
+  var out = extend(token_options || {}, {
     access_token: this.serializer.stringify([user_id, client_id, +new Date, extra_data]),
     refresh_token: null,
   });
   return out;
 };
 
-OAuth2Provider.prototype.login = function() {
+OpenIDConnect.prototype.errorHandle = function(res, uri, error, desc) {
+  if(uri) {
+    var redirect = url.parse(uri,true);
+    redirect.query.error = error; //'invalid_request';
+    redirect.query.error_description = desc; //'Parameter '+x+' is mandatory.';
+    res.redirect(url.fromat(redirect));
+  } else {
+    res.send(400, error+': '+desc);
+  }
+};
+
+OpenIDConnect.prototype.auth = function() {
+  var self = this;
+  return [
+    function(req, res, next) {
+      /*
+      * Authorization Server authenticates the End-User.
+      */
+      var spec = {
+	response_type: true, 
+	client_id: true, 
+	scope: true, 
+	redirect_uri: true, 
+	state: false, 
+	nonce: false, 
+	display: false, 
+	prompt: false, 
+	max_age: false, 
+	ui_locales: false, 
+	claims_locales: false, 
+	id_token_hint: false, 
+	login_hint: false, 
+	acr_values: false
+      };
+      var params = {};
+      var r = req.query.redirect_uri || req.body.redirect_uri;
+      for(var i in spec) {
+	var x = req.query[i] || req.body[i] || false;
+	if(!x && spec[i] !== false) {
+	  self.errorHandle(res, r, 'invalid_request', 'Parameter '+x+' is mandatory.');
+	  return;
+	}
+	if(x) {
+	  params[i] = x;
+	}
+      }
+      switch(params.response_type) {
+	case 'code':
+	  if(req.session.user) {
+	    next();
+	  } else {
+	    var client = redis.get(self.options.redis_prefix+params.client_id+':client_app');
+	    if(!client || client == '') {
+	      self.errorHandle(res, r, 'invalid_request', 'Client '+params.client_id+' doesn\'t exist.');
+	      return;
+	    }
+	    var q = req.path+'?'+querystring.stringify(params);
+	    res.redirect(self.options.login_uri+'?'+querystring.stringify({return_url: q}));
+	  }
+	  break;
+	default:
+	  self.errorHandle(res, r, 'unsupported_response_type', 'Response type '+options.response_type+' not supported.');
+      }
+    },
+    function(req, res, next) {
+      /*
+      * Authorization Server obtains the End-User Consent/Authorization.
+      */
+      var spec = {
+	response_type: true, 
+	client_id: true, 
+	scope: true, 
+	redirect_uri: true, 
+	state: false, 
+	nonce: false, 
+	display: false, 
+	prompt: false, 
+	max_age: false, 
+	ui_locales: false, 
+	claims_locales: false, 
+	id_token_hint: false, 
+	login_hint: false, 
+	acr_values: false
+      };
+      var params = {};
+      var r = req.query.redirect_uri || req.body.redirect_uri;
+      for(var i in spec) {
+	var x = req.query[i] || req.body[i] || false;
+	if(!x && spec[i] !== false) {
+	  self.errorHandle(res, r, 'invalid_request', 'Parameter '+x+' is mandatory.');
+	  return;
+	}
+	if(x) {
+	  params[i] = x;
+	}
+      }
+      if(!/(^|.*\W)openid(\W.*|$)/.test(params.scope)) {
+	self.errorHandle(res, r, 'invalid_request', 'Scope openid is mandatory.');
+	return;
+      }
+      var reqsco = params.scope.split(' ');
+      req.session.scopes = {};
+      var consent_redirect = false;
+      for(var i in reqsco) {
+	if(!self.options.scopes[i]) {
+	  self.errorHandle(res, r, 'invalid_scope', 'Scope '+i+' not supported'.);
+	  return;
+	}
+	req.session.scopes[i] = redis.sismember(self.options.redis_prefix+req.session.user+':scopes', i);
+	if(!scopes[i]) {
+	  consent_redirect = true;
+	}
+      }
+      if(!consent_redirect) {
+	next();
+      } else {
+	var q = req.path+'?'+querystring.stringify(params);
+	res.redirect(self.options.consent_uri+'?'+querystring.stringify({return_url: q}));
+      }
+    },
+    function(req, res, next) {
+      /*
+      * Authorization Server sends the End-User back to the Client with code.
+      */
+      var spec = {
+	response_type: true, 
+	client_id: true, 
+	scope: true, 
+	redirect_uri: true, 
+	state: false, 
+	nonce: false, 
+	display: false, 
+	prompt: false, 
+	max_age: false, 
+	ui_locales: false, 
+	claims_locales: false, 
+	id_token_hint: false, 
+	login_hint: false, 
+	acr_values: false
+      };
+      var params = {};
+      var r = req.query.redirect_uri || req.body.redirect_uri;
+      for(var i in spec) {
+	var x = req.query[i] || req.body[i] || false;
+	if(!x && spec[i] !== false) {
+	  self.errorHandle(res, r, 'invalid_request', 'Parameter '+x+' is mandatory.');
+	  return;
+	}
+	if(x) {
+	  params[i] = x;
+	}
+      }
+      switch(params.response_type) {
+	case 'code':
+	  var token = self.serializer.stringify([req.session.user, params.client_id, Math.random()]);
+	  redis.set(self.options.redis_prefix+req.session.user+':'+token, 'created');
+	  setTimeout(function() {
+	    if(redis.get(self.options.redis_prefix+req.session.user+':'+token) == 'created') {
+	      redis.del(self.options.redis_prefix+req.session.user+':'+token);
+	    }
+	  }, 1000*60*10); //10 minutes
+	  var uri = url.parse(params.redirect_uri, true);
+	  uri.query.code = token;
+	  if(params.state) {
+	    uri.query.state = params.state;
+	  }
+	  res.redirect(url.format(uri));
+	  break;
+	default:
+	  self.errorHandle(res, r, 'unsupported_response_type', 'Response type '+options.response_type+' not supported.');
+      }
+    }
+  ];
+};
+
+OpenIDConnect.prototype.setConcent = function() {
+  var self = this;
+  return function(req, res, next) {
+    var accept = req.query.accept || req.body.accept || false;
+    var return_url = req.query.accept || req.body.accept || false;
+    if(accept) {
+      for(var i in req.session.scopes) {
+	redis.sadd(self.options.redis_prefix+req.session.user+':scopes', i)
+      }
+      res.redirect(return_url);
+    } else {
+      var returl = url.parse(return_url, true);
+      var redirect_uri = returl.query.redirect_uri;
+      self.errorHandle(req, redirect_uri, 'access_denied', 'Resource Owner denied Access.');
+    }
+  };
+};
+
+/*
+ * Client sends the code to the Token Endpoint to receive an Access Token and ID Token in the response.
+*/
+OpenIDConnect.prototype.token = function() {
+};
+
+
+/*
+OpenIDConnect.prototype.login = function() {
   var self = this;
 
   return function(req, res, next) {
@@ -276,5 +486,5 @@ OAuth2Provider.prototype._createAccessToken = function(user_id, client_id, cb) {
     return cb(atok);
   });
 };
-
-exports.OAuth2Provider = OAuth2Provider;
+*/
+exports.OpenIDConnect = OpenIDConnect;

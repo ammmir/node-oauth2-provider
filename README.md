@@ -1,64 +1,62 @@
-# OAuth 2 Provider for Connect & Express
+# OAuth 2 Provider with support for OpenID/Connect specification
 
-This is a node.js module for implementing OAuth2 servers (providers)
-that support server-side (code) and client-side (token) OAuth flows.
+This is an OAuth 2 server implementation with support for OpenID/Connect specification
 
-It's very customizable, so you can (and currently, must) take care of
-OAuth token storage and client lists. In the future, a Mongo or Redis
-backed abstraction will be provided so you don't need to care about
-any kind of storage at all.
-
-## Using it with npm
-
-If you're using this module via npm, please be sure the bracket the
-version in your app's `package.json` file. Major versions may have an
-incompatible API that's not backwards-compatible, so use a safe version
-range under `dependencies` (eg. for version 1.x):
-
-    "oauth2-provider": "1.x"
-
-## Quick Start
+## Install
 
 Install via npm:
 
-    npm install oauth2-provider
+    npm install OpenIDConnect
 
 You can add it to your Connect or Express application as another middleware.
 Be sure to enable the `bodyParser` and `query` middleware.
 
-The OAuth2Provider instance providers two middleware:
+To use it inside your project, just do:
 
-* `oauth()`: OAuth flow entry and access token generation
-* `login()`: Access control for protected resources
+```
+var oidc = require('OpenIDConnect').oidc();
+```
 
-The most importand event emitted by OAuth2Provider is `access_token`, which
-lets you set up the request as if it were authenticated. For example, to
-support both cookie-authenticated and OAuth access to protected URLs, you
-could populate `req.session.user` so that individual URLs don't need to
-care about which type of authentication was used.
+and then, for example, with express
 
-To support client authentication (sometimes known as xAuth) for trusted
-clients, handle the `client_auth` event to exchange a username and password
-for an access token. See `examples/simple_express3.js`.
+```
+app.get('/authorization', oidc.auth());
+```
+
+## API
+
+* ### auth()
+
+  returns a function to be placed as middleware in connect/express routing methods. For example:
+
+ `app.get('/authorization', oidc.auth());`
+ 
+  This is the authorization endpoint, as described in [http://tools.ietf.org/html/rfc6749#section-3.1](http://tools.ietf.org/html/rfc6749#section-3.1)
+
+* ### consent()
+
+  returns a function to be placed as middleware in connect/express routing methods. For example:
+ 
+  `app.post('/consent', oidc.consent());`
+ 
+  This method saves the consent of the resource owner to a client request, or returns an access_denied error.
+
+* ### token()
+
+  returns a function to be placed as middleware in connect/express routing methods. For example:
+ 
+  `app.get('/token', oidc.token());`
+ 
+  This is the token endpoint, as described in [http://tools.ietf.org/html/rfc6749#section-3.2](http://tools.ietf.org/html/rfc6749#section-3.2)
+
+* ###check([scopes])
+ 
+  returns a function to be placed as middleware in connect/express routing methods. For example:
+ 
+  `app.get('/api/user', oidc.check(['openid', 'profile']), function(req, res, next) { ... });`
+ 
+  This function is used to check if an access_token is present, and if certain scopes where granted to it.
 
 ## Example
 
-In the root directory, run `npm install express` and then run:
-
-    node examples/simple_express3.js
-
-Visit <http://localhost:8081/login> to gain access to
-<http://localhost:8081/secret> or use OAuth to obtain an access token as a code (default) or a token (in the URL hash):
-
-  - code: <http://localhost:8081/oauth/authorize?client_id=1&redirect_uri=http://myapp.foo/>
-  - token: <http://localhost:8081/oauth/authorize?client_id=1&redirect_uri=http://myapp.foo/&response_type=token>
-
-## Running tests
-
-  Install dev dependencies:
-  
-    $ npm install -d
-
-  Run the tests:
-
-    $ make test
+Complete example soon.

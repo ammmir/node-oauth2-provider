@@ -1,21 +1,115 @@
 /**
  * index.js
- * OAuth 2.0 provider
+ * OpenIDConnect provider
+ * Based on OAuth 2.0 provider by Amir Malik 
  *
- * @author Amir Malik
+ * @author Agustín Moyano
  */
 
 var EventEmitter = require('events').EventEmitter,
      querystring = require('querystring'),
-      serializer = require('serializer'),
-      redis = require('redis').createClient(),
+      //serializer = require('serializer'),
+      hashlib = require('hashlib2'),
       extend = require('extend'),
-      url = require('url');
+      url = require('url'),
+      Q = require('q'),
+      jwt = require('jwt-simple'),
+      util = require("util");
 
-      
+var modelObj = {
+  user: {
+    _obj: {
+      type: 'hash',
+      reverse: ['email'],
+      props: {
+	name: {html: 'input', mandatory: true},
+	lastname: {html: 'input', mandatory: true},
+	email: {html: 'input', mandatory: true},
+	password: {html: 'password'},
+	openidProvider: {mandatory: false},
+	photo: {html: 'file'},
+	birthday: {html: 'date'},
+	country: {html: 'input'},
+	city: {html: 'input'},
+	phone: {html: 'input'}
+      }
+    },
+    clients: {type: 'set', refs: true}
+  },
+  client: {
+    _obj: {
+      type: 'hash',
+      reverse: ['id'],
+      props: {
+	id: {html: 'fixed', mandatory: true},
+	secret: {html: 'fixed', mandatory: true},
+	name: {html: 'input', mandatory: true},
+	image: {mandatory: false},
+	user: {mandatory: true}
+      }
+    }
+  },
+  consent: {
+    _obj: {
+      type: 'hash',
+      reverse: ['user', 'client'],
+      props: {
+	user: {mandatory: true},
+	client: {mandatory: true}
+      },
+    },
+    scopes: {type: 'set'}
+  },
+  auth: {
+    _obj: {
+      type: 'hash',
+      reverse: ['code'],
+      props: {
+	clientId: {mandatory: true},
+	scope: {mandatory: true},
+	user: {mandatory: true},
+	code: {mandatory: true},
+	redirectUri: {mandatory: true},
+	responseType: {mandatory: true},
+	status: {mandatory: true}
+      }
+    },
+    accessTokens: {type: 'set'},
+    refreshTokens: {type: 'set'}
+  },
+  access: {
+    _obj: {
+      type: 'hash',
+      reverse: ['token'],
+      props: {
+	token: {mandatory: true},
+	type: {mandatory: true},
+	idToken: {mandatory: true},
+	expiresIn: {mandatory: false},
+	scope: {mandatory: true},
+	clientId: {mandatory: true},
+	user: {mandatory: true},
+	auth: {refs: true}
+      }
+    }
+  },
+  refresh: {
+    _obj: {
+      type: 'hash',
+      reverse: ['token'],
+      props: {
+	token: {mandatory: true},
+	scope: {mandatory: true},
+	auth: {refs: true},
+	status: {mandatory: true}
+      }
+    }
+  }
+};
+
 var defaults = {
   authorize_uri: '/authorize',
-  access_token_uri: '/access_token',
+  token_uri: '/token',
   login_uri: '/login',
   create_user_uri: '/create_user',
   register_app_uri: '/register_app',
@@ -28,30 +122,9 @@ var defaults = {
     phone: 'Access to the phone_number and phone_number_verified Claims.', 
     offline_access: 'Grants access to the End-User\'s UserInfo Endpoint even when the End-User is not present (not logged in).'
   },
-  redis_prefix: 'openid:connect:'
+  redis_prefix: 'oidc:'
 };
 
-_extend = function(dst,src) {
-
-  var srcs = [];
-  if ( typeof(src) == 'object' ) {
-    srcs.push(src);
-  } else if ( typeof(src) == 'array' ) {
-    for (var i = src.length - 1; i >= 0; i--) {
-      srcs.push(this._extend({},src[i]))
-    };
-  } else {
-    throw new Error("Invalid argument")
-  }
-
-  for (var i = srcs.length - 1; i >= 0; i--) {
-    for (var key in srcs[i]) {
-      dst[key] = srcs[i][key];
-    }
-  };
-
-  return dst;
-}
 function parse_authorization(authorization) {
   if(!authorization)
     return null;
@@ -75,17 +148,35 @@ function parse_authorization(authorization) {
 
 function OpenIDConnect(options) {
   this.options = extend(true, {}, options, defaults);
-  this.serializer = serializer.createSecureSerializer(this.options.crypt_key, this.options.sign_key);
+  var rm = require('redis-modelize');
+  this.model = rm.init(modelObj, {prefix: this.options.redis_prefix});
+  this.redisClient = rm.client;
 }
 
 OpenIDConnect.prototype = new EventEmitter();
 
-OpenIDConnect.prototype.generateAccessToken = function(user_id, client_id, extra_data, token_options) {
-  var out = extend(token_options || {}, {
-    access_token: this.serializer.stringify([user_id, client_id, +new Date, extra_data]),
-    refresh_token: null,
-  });
-  return out;
+OpenIDConnect.prototype.getClientParams = function() {
+  return this.model.client.getParams();
+};
+
+OpenIDConnect.prototype.client = function(params, callback) {
+  return new this.model.client(params, callback);
+};
+
+OpenIDConnect.prototype.searchClient = function(parts, callback) {
+  return new this.model.client.reverse(parts, callback);
+};
+
+OpenIDConnect.prototype.getUserParams = function() {
+  return this.model.user.getParams();
+};
+
+OpenIDConnect.prototype.user = function(params, callback) {
+  return new this.model.user(params, callback);
+};
+
+OpenIDConnect.prototype.searchUser = function(parts, callback) {
+  return new this.model.user.reverse(parts, callback);
 };
 
 OpenIDConnect.prototype.errorHandle = function(res, uri, error, desc) {
@@ -93,161 +184,168 @@ OpenIDConnect.prototype.errorHandle = function(res, uri, error, desc) {
     var redirect = url.parse(uri,true);
     redirect.query.error = error; //'invalid_request';
     redirect.query.error_description = desc; //'Parameter '+x+' is mandatory.';
-    res.redirect(url.fromat(redirect));
+    res.redirect(400, url.format(redirect));
   } else {
     res.send(400, error+': '+desc);
   }
 };
 
+
+OpenIDConnect.prototype.getParams = function(req, res, spec) {
+  var params = {};
+  var r = req.query.redirect_uri || req.body.redirect_uri;
+  for(var i in spec) {
+    var x = req.query[i] || req.body[i] || false;
+    if(!x && spec[i] !== false) {
+      throw {type: 'error', uri: r, error: 'invalid_request', msg: 'Parameter '+x+' is mandatory.'};
+      //self.errorHandle(res, r, 'invalid_request', 'Parameter '+x+' is mandatory.');
+      //return;
+    }
+    if(x) {
+      params[i] = x;
+    }
+  }
+  return params;
+};
+
+/**
+ * auth
+ * 
+ * returns a function to be placed as middleware in connect/express routing methods. For example:
+ * 
+ * app.get('/authorization', oidc.auth());
+ * 
+ * This is the authorization endpoint, as described in http://tools.ietf.org/html/rfc6749#section-3.1
+ * 
+ */
 OpenIDConnect.prototype.auth = function() {
   var self = this;
+  var spec = {
+    response_type: true, 
+    client_id: true, 
+    scope: true, 
+    redirect_uri: true, 
+    state: false, 
+    nonce: false, 
+    display: false, 
+    prompt: false, 
+    max_age: false, 
+    ui_locales: false, 
+    claims_locales: false, 
+    id_token_hint: false, 
+    login_hint: false, 
+    acr_values: false
+  };
+  var redis = this.redisClient;
   return [
     function(req, res, next) {
-      /*
-      * Authorization Server authenticates the End-User.
-      */
-      var spec = {
-	response_type: true, 
-	client_id: true, 
-	scope: true, 
-	redirect_uri: true, 
-	state: false, 
-	nonce: false, 
-	display: false, 
-	prompt: false, 
-	max_age: false, 
-	ui_locales: false, 
-	claims_locales: false, 
-	id_token_hint: false, 
-	login_hint: false, 
-	acr_values: false
-      };
-      var params = {};
-      var r = req.query.redirect_uri || req.body.redirect_uri;
-      for(var i in spec) {
-	var x = req.query[i] || req.body[i] || false;
-	if(!x && spec[i] !== false) {
-	  self.errorHandle(res, r, 'invalid_request', 'Parameter '+x+' is mandatory.');
-	  return;
+      Q(self).post('getParams', [req, res, spec])
+      .then(function(params) {
+	//Step 1: Check if user is logged in
+	
+	if(req.session.user) {
+	  //next();
+	  return params;
+	} else {
+	  var q = req.path+'?'+querystring.stringify(params);
+	  throw {type: 'redirect', uri: self.options.login_uri+'?'+querystring.stringify({return_url: q})};  
 	}
-	if(x) {
-	  params[i] = x;
+      }).then(function(params) {
+	//Step 2: Check if response_type is supported and client_id is valid.
+	
+	var deferred = Q.defer();
+	switch(params.response_type) {
+	  case 'code':
+	    self.searchClient(params.client_id, function(err, reply){
+	      if(err || !reply || reply == '') {
+		deferred.reject({type: 'error', uri: params.redirect_uri, error: 'invalid_client', msg: 'Client '+params.client_id+' doesn\'t exist.'});
+	      } else {
+		req.session.redis_client_id = reply;
+		deferred.resolve(params);
+	      }
+	    });
+	    break;
+	  default:
+	    throw {type: 'error', uri: params.redirect_uri, error: 'unsupported_response_type', msg: 'Response type '+options.response_type+' not supported.'};
 	}
-      }
-      switch(params.response_type) {
-	case 'code':
-	  if(req.session.user) {
-	    next();
-	  } else {
-	    var client = redis.get(self.options.redis_prefix+params.client_id+':client_app');
-	    if(!client || client == '') {
-	      self.errorHandle(res, r, 'invalid_request', 'Client '+params.client_id+' doesn\'t exist.');
-	      return;
+	return deferred.promise;
+      }).then(function(params){
+	//Step 3: Check if scopes are valid, and if consent was given.
+	
+	var deferred = Q.defer();
+	var reqsco = params.scope.split(' ');
+	req.session.scopes = {};
+	var promises = [];
+	self.model.consent.reverse([req.session.user, params.client_id], function(err, grant_id) {
+	  reqsco.forEach(function(scope) {
+	    var innerDef = Q.defer();
+	    if(!self.options.scopes[scope]) {
+	      throw {type: 'error', uri: params.redirect_uri, error: 'invalid_scope', msg: 'Scope '+scope+' not supported.'};
 	    }
-	    var q = req.path+'?'+querystring.stringify(params);
-	    res.redirect(self.options.login_uri+'?'+querystring.stringify({return_url: q}));
+	    if(!grant_id) {
+	      req.session.scopes[scope] = {ismember: false, explain: self.options.scopes[scope]};
+	      innerDef.resolve(true);
+	    } else {
+	      this.inScopes(scope, function(err, response) {
+		req.session.scopes[scope] = {ismember: response, explain: self.options.scopes[scope]};
+		if(!response) {
+		  innerDef.resolve(true);
+		} else {
+		  innerDef.resolve(false);
+		}
+	      });
+	    }
+	    promises.push(innerDef.promise)
+	  });
+	});
+	Q.allSettled(promises).then(function(results){
+	  var redirect = false;
+	  for(var i = 0; i<results.length; i++) {
+	    if(results[i].value) {
+	      redirect = true;
+	      break;
+	    }
 	  }
-	  break;
-	default:
-	  self.errorHandle(res, r, 'unsupported_response_type', 'Response type '+options.response_type+' not supported.');
-      }
-    },
-    function(req, res, next) {
-      /*
-      * Authorization Server obtains the End-User Consent/Authorization.
-      */
-      var spec = {
-	response_type: true, 
-	client_id: true, 
-	scope: true, 
-	redirect_uri: true, 
-	state: false, 
-	nonce: false, 
-	display: false, 
-	prompt: false, 
-	max_age: false, 
-	ui_locales: false, 
-	claims_locales: false, 
-	id_token_hint: false, 
-	login_hint: false, 
-	acr_values: false
-      };
-      var params = {};
-      var r = req.query.redirect_uri || req.body.redirect_uri;
-      for(var i in spec) {
-	var x = req.query[i] || req.body[i] || false;
-	if(!x && spec[i] !== false) {
-	  self.errorHandle(res, r, 'invalid_request', 'Parameter '+x+' is mandatory.');
-	  return;
-	}
-	if(x) {
-	  params[i] = x;
-	}
-      }
-      if(!/(^|.*\W)openid(\W.*|$)/.test(params.scope)) {
-	self.errorHandle(res, r, 'invalid_request', 'Scope openid is mandatory.');
-	return;
-      }
-      var reqsco = params.scope.split(' ');
-      req.session.scopes = {};
-      var consent_redirect = false;
-      for(var i in reqsco) {
-	if(!self.options.scopes[i]) {
-	  self.errorHandle(res, r, 'invalid_scope', 'Scope '+i+' not supported'.);
-	  return;
-	}
-	req.session.scopes[i] = redis.sismember(self.options.redis_prefix+req.session.user+':scopes', i);
-	if(!scopes[i]) {
-	  consent_redirect = true;
-	}
-      }
-      if(!consent_redirect) {
-	next();
-      } else {
-	var q = req.path+'?'+querystring.stringify(params);
-	res.redirect(self.options.consent_uri+'?'+querystring.stringify({return_url: q}));
-      }
-    },
-    function(req, res, next) {
-      /*
-      * Authorization Server sends the End-User back to the Client with code.
-      */
-      var spec = {
-	response_type: true, 
-	client_id: true, 
-	scope: true, 
-	redirect_uri: true, 
-	state: false, 
-	nonce: false, 
-	display: false, 
-	prompt: false, 
-	max_age: false, 
-	ui_locales: false, 
-	claims_locales: false, 
-	id_token_hint: false, 
-	login_hint: false, 
-	acr_values: false
-      };
-      var params = {};
-      var r = req.query.redirect_uri || req.body.redirect_uri;
-      for(var i in spec) {
-	var x = req.query[i] || req.body[i] || false;
-	if(!x && spec[i] !== false) {
-	  self.errorHandle(res, r, 'invalid_request', 'Parameter '+x+' is mandatory.');
-	  return;
-	}
-	if(x) {
-	  params[i] = x;
-	}
-      }
-      switch(params.response_type) {
-	case 'code':
-	  var token = self.serializer.stringify([req.session.user, params.client_id, Math.random()]);
-	  redis.set(self.options.redis_prefix+req.session.user+':'+token, 'created');
-	  setTimeout(function() {
-	    if(redis.get(self.options.redis_prefix+req.session.user+':'+token) == 'created') {
-	      redis.del(self.options.redis_prefix+req.session.user+':'+token);
+	  if(redirect) {
+	    req.session.client_id = params.client_id;
+	    var q = req.path+'?'+querystring.stringify(params);
+	    deferred.reject({type: 'redirect', uri: self.options.consent_uri+'?'+querystring.stringify({return_url: q})});
+	  } else {
+	    deferred.resolve(params);
+	  }
+	});
+	return deferred.promise;
+      }).then(function(params){
+	//Step 5: create authorization code
+	
+	var createToken = function() {
+	  var token = hashlib.md5(Math.random());
+	  redis.sismember(self.options.redis_prefix+'tokens', token, function(err, response) {
+	    if(!response) {
+	      redis.sadd(self.options.redis_prefix+'tokens', token);
+	      setToken(token);
+	    } else {
+	      createToken();
 	    }
+	  });
+	};
+	var setToken = function(token) {
+	  var p = new self.model.auth({
+	    clientId: params.client_id,
+	    scope: params.scope,
+	    user: req.session.user,
+	    code: token,
+	    redirectUri: params.redirect_uri,
+	    responseType: params.response_type,
+	    status: 'created'
+	  });
+	  setTimeout(function() {
+	    p.getStatus(function(err, response) { 
+	      if(response == 'created') {
+		p.del();
+		redis.srem(self.options.redis_prefix+'tokens', token);
+	      }
+	    });
 	  }, 1000*60*10); //10 minutes
 	  var uri = url.parse(params.redirect_uri, true);
 	  uri.query.code = token;
@@ -255,236 +353,389 @@ OpenIDConnect.prototype.auth = function() {
 	    uri.query.state = params.state;
 	  }
 	  res.redirect(url.format(uri));
-	  break;
-	default:
-	  self.errorHandle(res, r, 'unsupported_response_type', 'Response type '+options.response_type+' not supported.');
-      }
+	};
+	createToken();
+      })
+      .catch(function(error) {
+	if(error.type == 'error') {
+	  self.errorHandle(res, error.uri, error.error, error.msg);
+	} else {
+	  res.redirect(error.uri);
+	}
+      }); 
     }
   ];
 };
 
-OpenIDConnect.prototype.setConcent = function() {
+/**
+ * consent
+ * 
+ * returns a function to be placed as middleware in connect/express routing methods. For example:
+ * 
+ * app.post('/consent', oidc.consent());
+ * 
+ * This method saves the consent of the resource owner to a client request, or returns an access_denied error.
+ * 
+ */
+OpenIDConnect.prototype.consent = function() {
   var self = this;
   return function(req, res, next) {
     var accept = req.query.accept || req.body.accept || false;
-    var return_url = req.query.accept || req.body.accept || false;
+    var return_url = req.query.return_url || req.body.return_url || false;
+    //var client_id = req.query.client_id || req.body.client_id || false;
     if(accept) {
-      for(var i in req.session.scopes) {
-	redis.sadd(self.options.redis_prefix+req.session.user+':scopes', i)
-      }
-      res.redirect(return_url);
+      new self.model.consent({user: req.session.user, client: req.session.client_id}, function(err, id) {
+	for(var i in req.session.scopes) {
+	  this.setScopes(i);
+	}
+	res.redirect(return_url);
+      });
     } else {
       var returl = url.parse(return_url, true);
       var redirect_uri = returl.query.redirect_uri;
-      self.errorHandle(req, redirect_uri, 'access_denied', 'Resource Owner denied Access.');
+      self.errorHandle(res, redirect_uri, 'access_denied', 'Resource Owner denied Access.');
     }
   };
 };
 
-/*
- * Client sends the code to the Token Endpoint to receive an Access Token and ID Token in the response.
-*/
+
+/**
+ * token
+ * 
+ * returns a function to be placed as middleware in connect/express routing methods. For example:
+ * 
+ * app.get('/token', oidc.token());
+ * 
+ * This is the token endpoint, as described in http://tools.ietf.org/html/rfc6749#section-3.2
+ * 
+ */
 OpenIDConnect.prototype.token = function() {
-};
-
-
-/*
-OpenIDConnect.prototype.login = function() {
   var self = this;
-
+  var spec = {
+    grant_type: true, 
+    code: false, 
+    redirect_uri: false,
+    refresh_token: false,
+    scope: false
+  };
+  var redis = this.redisClient;
+  
   return function(req, res, next) {
-    var data, atok, user_id, client_id, grant_date, extra_data;
-
-    if(req.query['access_token']) {
-      atok = req.query['access_token'];
-    } else if((req.headers['authorization'] || '').indexOf('Bearer ') == 0) {
-      atok = req.headers['authorization'].replace('Bearer', '').trim();
+    var params = self.getParams(req, res, spec);
+    
+    params.client_id = req.body.client_id;
+    params.client_secret = req.body.client_secret;
+    
+    if(!params.client_id || !params.client_secret) {
+      var authorization = parse_authorization(req.headers.authorization);
+      params.client_id = authorization[0];
+      params.client_secret = authorization[1];
+    }
+    if(!params.client_id || !params.client_secret) {
+      self.errorHandle(res, params.redirect_uri, 'invalid_client', 'No client credentials found.');
     } else {
-      return next();
-    }
+      
+      Q.fcall(function() {
+	//Step 1: Check if user is logged in
+	
+	if(req.session.user) {
+	  //next();
+	  return true;
+	} else {
+	  var q = req.path+'?'+querystring.stringify(params);
+	  throw {type: 'redirect', uri: self.options.login_uri+'?'+querystring.stringify({return_url: q})};  
+	}
+      })
+      .then(function() {
+	//Step 2: check if client and secret are valid
+	var deferred = Q.defer();
+	self.searchClient(params.client_id, function(err, reply){
+	  if(err || !reply || reply == '') {
+	    deferred.reject({type: 'error', error: 'invalid_client', msg: 'Client doesn\'t exist or invalid secret.'});
+	  } else {
+	    this.getSecret(function(err, secret) {
+	      if(!err && secret == params.client_secret) {
+		deferred.resolve(this);
+	      } else {
+		deferred.reject({type: 'error', error: 'invalid_client', msg: 'Client doesn\'t exist or invalid secret.'});
+	      }
+	    });
+	  }
+	});
+	return deferred.promise;
+      })
+      .then(function(client) {
+	
+	var deferred = Q.defer();
+	
+	switch(params.grant_type) {
+	  //Client is trying to exchange an authorization code for an access token
+	  case "authorization_code":
+	    //Step 3: check if code is valid and not used previously
+	    self.model.auth.reverse(params.code, function(err, auth) {
+	      if(!err && auth) {
+		var a = this;
+		this.get(function(err, obj) {
+		  if(obj.status != 'created') {
+		    a.getAccessTokens(function(err, tokens){
+		      tokens.forEach(function(token) {
+			new self.model.access(token).del();
+		      });
+		      a.getRefreshTokens(function(err, tokens) {
+			tokens.forEach(function(token) {
+			  new self.model.refresh(token).del();
+			});
+			a.del();
+		      });
+		    });
+		    deferred.reject({type: 'error', error: 'invalid_grant', msg: 'Authorization code already used.'});
+		  } else {
+		    obj.auth = a;
+		    deferred.resolve(obj);
+		  }
+		});
+	      } else {
+		deferred.reject({type: 'error', error: 'invalid_grant', msg: 'Authorization code is invalid.'});
+	      }
+	    });
+	    
+	    //Extra checks, required if grant_type is 'authorization_code'
+	    return deferred.promise.then(function(obj){
+	      //Step 4: check if grant_type is valid
+	      
+	      if(obj.responseType != 'code') {
+		throw {type: 'error', error: 'unauthorized_client', msg: 'Client cannot use this grant type.'};
+	      }
+	      
+	      //Step 5: check if redirect_uri is valid
+	      if((obj.redirectUri || params.redirect_uri) && obj.redirectUri != params.redirect_uri) {
+		throw {type: 'error', error: 'invalid_grant', msg: 'Redirection URI does not match.'};
+	      }
+	      	      
+	      return obj;
+	    });
+	    
+	    break;
+	  
+	  //Client is trying to exchange a refresh token for an access token
+	  case "refresh_token":
+	    
+	    //Step 3: check if refresh token is valid and not used previously
+	    self.model.refresh.reverse(params.refresh_token, function(err, refresh) {
+	      if(!err && refresh) {
+		this.getStatus(function(err, status) {
+		  var r = this;
+		  this.getRefAuth(function(err, auth) {
+		    if(status != 'created') {
+		      auth.getAccessTokens(function(err, tokens){
+			tokens.forEach(function(token) {
+			  new self.model.access(token).del();
+			});
+			auth.getRefreshTokens(function(err, tokens) {
+			  tokens.forEach(function(token) {
+			    new self.model.refresh(token).del();
+			  });
+			  auth.del();
+			});
+		      });
+		      deferred.reject({type: 'error', error: 'invalid_grant', msg: 'Refresh token already used.'});
+		    } else {
+		      r.setStatus('used');
+		      auth.get(function(err, obj) {
+			obj.auth = auth;
+			deferred.resolve(obj);
+		      });
+		    }
+		  });
+		});
+	      } else {
+		deferred.reject({type: 'error', error: 'invalid_grant', msg: 'Refresh token is not valid.'});
+	      }
+	    });
+	    return deferred.promise.then(function(obj){
+	      if(params.scope) {
+		var scopes = params.scope.split(' ');
+		var objScopes = obj.scope.split(' ');
+		scopes.forEach(function(scope) {
+		  if(objScopes.indexOf(scope) == -1) {
+		    throw {type: 'error', uri: params.redirect_uri, error: 'invalid_scope', msg: 'Scope '+scope+' was not granted for this token.'};
+		  }
+		});
+		obj.scope = params.scope;
+	      }
+	      return obj;
+	    });
+	    break;
+	}
+	
+      })
+      .then(function(obj) {
+	//Check if code was issued for client
+	if(obj.clientId != params.client_id) {
+	  throw {type: 'error', error: 'invalid_grant', msg: 'The code was not issued for this client.'};
+	}
+	
+	return obj;
 
-    try {
-      data = self.serializer.parse(atok);
-      user_id = data[0];
-      client_id = data[1];
-      grant_date = new Date(data[2]);
-      extra_data = data[3];
-    } catch(e) {
-      res.writeHead(400);
-      return res.end(e.message);
-    }
+      })
+      .then(function(obj){
+	//Create access token
+	var scopes = obj.scope;
+	var auth = obj.auth;
+	
+	var createToken = function(cb) {
+	  var token = hashlib.md5(Math.random());
+	  redis.sismember(self.options.redis_prefix+'tokens', token, function(err, response) {
+	    if(!response) {
+	      redis.sadd(self.options.redis_prefix+'tokens', token);
+	      cb(token);
+	    } else {
+	      createToken(cb);
+	    }
+	  });
+	};
+	var setToken = function(access, refresh) {
+	  var obj = {
+	    token: refresh,
+	    scope: scopes,
+	    status: 'created'
+	  };
+	  new self.model.refresh(obj, function(err, id) {
+	    var r = this;
+	    this.setRefAuth(auth);
+	    auth.setRefreshTokens(id);
+	    setTimeout(function() {
+	      r.del();
+	      auth.remRefreshTokens(id, function() {
+		auth.getAccessTokens(function(err, atoks){
+		  if(atoks) return;
+		  auth.getRefreshTokens(function(err, rtoks){
+		    if(rtoks) return;
+		    auth.del();
+		  });
+		});
+	      });
+	    }, 1000*3600*5); //5 hours
+	    
+	    var d = Math.round(new Date().getTime()/1000);
+	    var id_token = {
+	      iss: req.protocol+'://'+req.headers.host,
+	      sub: req.session.user,
+	      aud: params.client_id,
+	      exp: d+3600,
+	      iat: d
+	    };
+	    var obj = {
+	      token: access,
+	      type: 'Bearer',
+	      expiresIn: 3600,
+	      user: req.session.user,
+	      clientId: params.client_id,
+	      idToken: jwt.encode(id_token, 'some key!!!!'),
+	      scope: scopes
+	    };
+	    new self.model.access(obj, function(err, id) {
+	      if(!err && id) {
+		var a = this;
+		this.setRefAuth(auth);
+		auth.setAccessTokens(id);
+		auth.setStatus('used');
 
-    self.emit('access_token', req, {
-      user_id: user_id,
-      client_id: client_id,
-      extra_data: extra_data,
-      grant_date: grant_date
-    }, next);
+		setTimeout(function() {
+		  a.del();
+		  auth.remAccessTokens(id, function() {
+		    auth.getAccessTokens(function(err, atoks){
+		      if(atoks) return;
+		      auth.getRefreshTokens(function(err, rtoks){
+			if(rtoks) return;
+			auth.del();
+		      });
+		    });
+		  });
+		}, 1000*3600); //1 hour		
+		
+		res.json({
+		  access_token: access,
+		  token_type: obj.type,
+		  expires_in: obj.expiresIn,
+		  refresh_token: refresh,
+		  id_token: obj.idToken
+		});
+	      }
+	    });
+	  }); 
+	};
+	createToken(function(access) {
+	  createToken(function(refresh){
+	    setToken(access, refresh);
+	  });
+	});
+      })
+      .catch(function(error) {
+	if(error.type == 'error') {
+	  self.errorHandle(res, params.redirect_uri, error.error, error.msg);
+	} else {
+	  res.redirect(error.uri);
+	}
+      }); 
+    }
   };
 };
 
-OAuth2Provider.prototype.oauth = function() {
+
+/** 
+ * check
+ * 
+ * returns a function to be placed as middleware in connect/express routing methods. For example:
+ * 
+ * app.get('/api/user', oidc.check(['openid', 'profile']), function(req, res, next) { ... });
+ * 
+ * This function is used to check if an access_token is present, and if certain scopes where granted to it.
+ */
+OpenIDConnect.prototype.check = function(scopes) {
+  if(!util.isArray(scopes)) {
+    scopes = [scopes];
+  }
   var self = this;
-
+  spec = {
+    access_token: false
+  };
+  
   return function(req, res, next) {
-    var uri = ~req.url.indexOf('?') ? req.url.substr(0, req.url.indexOf('?')) : req.url;
-
-    if(req.method == 'GET' && self.options.authorize_uri == uri) {
-      var    client_id = req.query.client_id,
-          redirect_uri = req.query.redirect_uri;
-
-      if(!client_id || !redirect_uri) {
-        res.writeHead(400);
-        return res.end('client_id and redirect_uri required');
-      }
-
-      // authorization form will be POSTed to same URL, so we'll have all params
-      var authorize_url = req.url;
-
-      self.emit('enforce_login', req, res, authorize_url, function(user_id) {
-        // store user_id in an HMAC-protected encrypted query param
-        authorize_url += '&' + querystring.stringify({x_user_id: self.serializer.stringify(user_id)});
-
-        // user is logged in, render approval page
-        self.emit('authorize_form', req, res, client_id, authorize_url);
+    var params = self.getParams(req, res, spec);
+    if(!params.access_token) {
+      params.access_token = (req.headers['authorization'] || '').indexOf('Bearer ') == 0?req.headers['authorization'].replace('Bearer', '').trim():false;
+    }
+    if(params.access_token) {
+      self.model.access.reverse(params.access_token, function(err, id) {
+	if(!err && id) {
+	  this.get(function(err, obj) {
+	    var errors = [];
+	    scopes.forEach(function(scope) {
+	      if(obj.scope.indexOf(scope) == -1) {
+		errors.push(scope);
+	      }
+	    });
+	    if(errors.length > 1) {
+	      var last = errors.pop();
+	      self.errorHandle(res, null, 'invalid_scope', 'Required scopes '+errors.join(', ')+' and '+last+' where not found.');
+	    } else if(errors.length > 0) {
+	      self.errorHandle(res, null, 'invalid_scope', 'Required scope '+errors.pop()+' not found.');
+	    } else {
+	      next();
+	    }
+	  });
+	} else {
+	  self.errorHandle(res, null, 'unauthorized_client', 'Access token is not valid.');
+	}
       });
-
-    } else if(req.method == 'POST' && self.options.authorize_uri == uri) {
-      var     client_id = (req.query.client_id || req.body.client_id),
-           redirect_uri = (req.query.redirect_uri || req.body.redirect_uri),
-          response_type = (req.query.response_type || req.body.response_type) || 'code',
-                  state = (req.query.state || req.body.state),
-              x_user_id = (req.query.x_user_id || req.body.x_user_id);
-
-      var url = redirect_uri;
-
-      switch(response_type) {
-        case 'code': url += '?'; break;
-        case 'token': url += '#'; break;
-        default:
-          res.writeHead(400);
-          return res.end('invalid response_type requested');
-      }
-
-      if('allow' in req.body) {
-        if('token' == response_type) {
-          var user_id;
-
-          try {
-            user_id = self.serializer.parse(x_user_id);
-          } catch(e) {
-            console.error('allow/token error', e.stack);
-
-            res.writeHead(500);
-            return res.end(e.message);
-          }
-
-          self.emit('create_access_token', user_id, client_id, function(extra_data,token_options) {
-            var atok = self.generateAccessToken(user_id, client_id, extra_data, token_options);
-
-            if(self.listeners('save_access_token').length > 0)
-              self.emit('save_access_token', user_id, client_id, atok);
-
-            url += querystring.stringify(atok);
-
-            res.writeHead(303, {Location: url});
-            res.end();
-          });
-        } else {
-          var code = serializer.randomString(128);
-
-          self.emit('save_grant', req, client_id, code, function() {
-            var extras = {
-              code: code,
-            };
-
-            // pass back anti-CSRF opaque value
-            if(state)
-              extras['state'] = state;
-
-            url += querystring.stringify(extras);
-
-            res.writeHead(303, {Location: url});
-            res.end();
-          });
-        }
-      } else {
-        url += querystring.stringify({error: 'access_denied'});
-
-        res.writeHead(303, {Location: url});
-        res.end();
-      }
-
-    } else if(req.method == 'POST' && self.options.access_token_uri == uri) {
-      var     client_id = req.body.client_id,
-          client_secret = req.body.client_secret,
-           redirect_uri = req.body.redirect_uri,
-                   code = req.body.code;
-
-      if(!client_id || !client_secret) {
-        var authorization = parse_authorization(req.headers.authorization);
-
-        if(!authorization) {
-          res.writeHead(400);
-          return res.end('client_id and client_secret required');
-        }
-
-        client_id = authorization[0];
-        client_secret = authorization[1];
-      }
-
-      if('password' == req.body.grant_type) {
-        if(self.listeners('client_auth').length == 0) {
-          res.writeHead(401);
-          return res.end('client authentication not supported');
-        }
-
-        self.emit('client_auth', client_id, client_secret, req.body.username, req.body.password, function(err, user_id) {
-          if(err) {
-            res.writeHead(401);
-            return res.end(err.message);
-          }
-
-          res.writeHead(200, {'Content-type': 'application/json'});
-
-          self._createAccessToken(user_id, client_id, function(atok) {
-            res.end(JSON.stringify(atok));
-          });
-        });
-      } else {
-        self.emit('lookup_grant', client_id, client_secret, code, function(err, user_id) {
-          if(err) {
-            res.writeHead(400);
-            return res.end(err.message);
-          }
-
-          res.writeHead(200, {'Content-type': 'application/json'});
-
-          self._createAccessToken(user_id, client_id, function(atok) {
-            self.emit('remove_grant', user_id, client_id, code);
-
-            res.end(JSON.stringify(atok));
-          });
-        });
-      }
-
     } else {
-      return next();
+      self.errorHandle(res, null, 'unauthorized_client', 'No access token found.');
     }
   };
 };
 
-OAuth2Provider.prototype._createAccessToken = function(user_id, client_id, cb) {
-  var self = this;
 
-  this.emit('create_access_token', user_id, client_id, function(extra_data, token_options) {
-    var atok = self.generateAccessToken(user_id, client_id, extra_data, token_options);
-
-    if(self.listeners('save_access_token').length > 0)
-      self.emit('save_access_token', user_id, client_id, atok);
-
-    return cb(atok);
-  });
+exports.oidc = function(options) {
+  return new OpenIDConnect(options);
 };
-*/
-exports.OpenIDConnect = OpenIDConnect;

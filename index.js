@@ -22,16 +22,18 @@ var modelObj = {
       type: 'hash',
       reverse: ['email'],
       props: {
-	name: {html: 'input', mandatory: true},
-	lastname: {html: 'input', mandatory: true},
+	name: {mandatory: true},
+	given_name: {html: 'input', mandatory: true},
+	middle_name: {html: 'input', mandatory: false},
+	family_name: {html: 'input', mandatory: true},
+	profile: {mandatory: false}
 	email: {html: 'input', mandatory: true},
 	password: {html: 'password'},
 	openidProvider: {mandatory: false},
-	photo: {html: 'file'},
-	birthday: {html: 'date'},
-	country: {html: 'input'},
-	city: {html: 'input'},
-	phone: {html: 'input'}
+	picture: {html: 'file'},
+	birthdate: {html: 'date'},
+	gender: {html: 'radio', ops: ['male', 'female']},
+	phone_number: {html: 'input'}
       }
     },
     clients: {type: 'set', refs: true}
@@ -688,11 +690,20 @@ OpenIDConnect.prototype.token = function() {
  * 
  * returns a function to be placed as middleware in connect/express routing methods. For example:
  * 
- * app.get('/api/user', oidc.check(['openid', 'profile']), function(req, res, next) { ... });
+ * app.get('/api/user', oidc.check(true, 'openid', /profile|email/), function(req, res, next) { ... });
  * 
- * This function is used to check if an access_token is present, and if certain scopes where granted to it.
+ * If the first argument is a boolean and equals 'true', checks if user is logged in.
+ * 
+ * The other arguments may be of type string or regexp.
+ * 
+ * This function is used to check if user logged in, if an access_token is present, and if certain scopes where granted to it.
  */
-OpenIDConnect.prototype.check = function(scopes) {
+OpenIDConnect.prototype.check = function() {
+  var login = false;
+  if(arguments[1] && typeof arguments[1] == 'boolean') {
+    login = Array.prototype.shift.call(arguments);
+  }
+  var scopes = Array.prototype.slice.call(arguments, 0);
   if(!util.isArray(scopes)) {
     scopes = [scopes];
   }
@@ -702,39 +713,83 @@ OpenIDConnect.prototype.check = function(scopes) {
   };
   
   return function(req, res, next) {
-    var params = self.getParams(req, res, spec);
-    if(!params.access_token) {
-      params.access_token = (req.headers['authorization'] || '').indexOf('Bearer ') == 0?req.headers['authorization'].replace('Bearer', '').trim():false;
-    }
-    if(params.access_token) {
-      self.model.access.reverse(params.access_token, function(err, id) {
-	if(!err && id) {
-	  this.get(function(err, obj) {
-	    var errors = [];
-	    scopes.forEach(function(scope) {
-	      if(obj.scope.indexOf(scope) == -1) {
-		errors.push(scope);
-	      }
-	    });
-	    if(errors.length > 1) {
-	      var last = errors.pop();
-	      self.errorHandle(res, null, 'invalid_scope', 'Required scopes '+errors.join(', ')+' and '+last+' where not found.');
-	    } else if(errors.length > 0) {
-	      self.errorHandle(res, null, 'invalid_scope', 'Required scope '+errors.pop()+' not found.');
+    if(req.session.user || !login) {
+      var params = self.getParams(req, res, spec);
+      if(!scopes.length) {
+	next();
+      } else {
+	if(!params.access_token) {
+	  params.access_token = (req.headers['authorization'] || '').indexOf('Bearer ') == 0?req.headers['authorization'].replace('Bearer', '').trim():false;
+	}
+	if(params.access_token) {
+	  self.model.access.reverse(params.access_token, function(err, id) {
+	    if(!err && id) {
+	      this.get(function(err, obj) {
+		var errors = [];
+		scopes.forEach(function(scope) {
+		  if(typeof scope == 'string') {
+		    if(obj.scope.indexOf(scope) == -1) {
+		      errors.push(scope);
+		    }
+		  } else if(util.isRegExp(scope) && !scope.test(obj.scope)){
+		    errors.push('('+scope.toString().replace(/\//g,'')+')');
+		  }
+		});
+		if(errors.length > 1) {
+		  var last = errors.pop();
+		  self.errorHandle(res, null, 'invalid_scope', 'Required scopes '+errors.join(', ')+' and '+last+' where not found.');
+		} else if(errors.length > 0) {
+		  self.errorHandle(res, null, 'invalid_scope', 'Required scope '+errors.pop()+' not found.');
+		} else {
+		  req.session.check = req.session.check||{};
+		  req.session.check.scopes = obj.scope.split(' ');
+		  next();
+		}
+	      });
 	    } else {
-	      next();
+	      self.errorHandle(res, null, 'unauthorized_client', 'Access token is not valid.');
 	    }
 	  });
 	} else {
-	  self.errorHandle(res, null, 'unauthorized_client', 'Access token is not valid.');
+	  self.errorHandle(res, null, 'unauthorized_client', 'No access token found.');
 	}
-      });
+      }
     } else {
-      self.errorHandle(res, null, 'unauthorized_client', 'No access token found.');
+      var q = req.path+'?'+querystring.stringify(params);
+      req.session.error = 'You must login to enter.';
+      throw {type: 'redirect', uri: self.options.login_uri+'?'+querystring.stringify({return_url: q})};  
     }
   };
 };
 
+/** 
+ * userInfo
+ * 
+ * returns a function to be placed as middleware in connect/express routing methods. For example:
+ * 
+ * app.get('/api/user', oidc.userInfo());
+ * 
+ * This function returns the user info in a json object. Checks for scope and login are included.
+ */
+OpenIDConnect.prototype.userInfo = function() {
+  var self = this;
+  return [
+    self.check(true, 'openid', /profile|email/),
+    function(req, res, next) {
+      self.client(req.session.user, function(err, id) {
+	this.get(function(err, obj) {
+	  if(req.session.check.scopes.indexOf('profile') != -1) {
+	    delete obj.password;
+	    delete obj.openidProvider;
+	    res.json(obj);
+	  } else {
+	    res.json({email: obj.email});
+	  }
+	}
+      }
+    }
+  ];
+};
 
 exports.oidc = function(options) {
   return new OpenIDConnect(options);

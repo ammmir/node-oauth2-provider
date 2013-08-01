@@ -25,7 +25,7 @@ app.get('/authorization', oidc.auth());
 
 ## API
 
-* ### auth()
+* **auth()**
 
   returns a function to be placed as middleware in connect/express routing methods. For example:
 
@@ -35,7 +35,7 @@ app.get('/authorization', oidc.auth());
  
   This is the authorization endpoint, as described in [http://tools.ietf.org/html/rfc6749#section-3.1](http://tools.ietf.org/html/rfc6749#section-3.1)
 
-* ### consent()
+* **consent()**
 
   returns a function to be placed as middleware in connect/express routing methods. For example:
  
@@ -45,7 +45,7 @@ app.get('/authorization', oidc.auth());
  
   This method saves the consent of the resource owner to a client request, or returns an access_denied error.
 
-* ### token()
+* **token()**
 
   returns a function to be placed as middleware in connect/express routing methods. For example:
  
@@ -55,15 +55,31 @@ app.get('/authorization', oidc.auth());
  
   This is the token endpoint, as described in [http://tools.ietf.org/html/rfc6749#section-3.2](http://tools.ietf.org/html/rfc6749#section-3.2)
 
-* ###check([scopes])
+* **check([boolean login], scope, ...)**
  
   returns a function to be placed as middleware in connect/express routing methods. For example:
  
   ```
-  app.get('/api/user', oidc.check(['openid', 'profile']), function(req, res, next) { ... });
+  app.get('/api/user', oidc.check(true, 'openid', /profile|email/), function(req, res, next) { ... });
   ```
+
+  If the first argument is a boolean and equals _true_, checks if user is logged in.
  
-  This function is used to check if an access_token is present, and if certain scopes where granted to it.
+  The other arguments may be of type _string_ or _regexp_.
+ 
+  This function is used to check if user logged in, if an access_token is present, and if certain scopes where granted to it.
+
+  `oidc.check(true)` just checks if user logged in.
+
+* **userInfo()**
+
+  returns a function to be placed as middleware in connect/express routing methods. For example:
+
+  ```
+  app.get('/api/user', oidc.userInfo());
+  ```
+
+  This function returns the user info in a json object. Checks for scope and login are included.
 
 ## Example
 

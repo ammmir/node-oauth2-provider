@@ -1,6 +1,6 @@
 {
   "name": "openid-connect",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "keywords": ["oauth", "oauth2", "server", "openid", "connect", "openid/connect"],
   "description": "This is an OAuth 2 server implementation with support for OpenID/Connect specification. Based on https://github.com/ammmir/node-oauth2-provider.",
   "homepage": "https://github.com/agmoyano/OpenIDConnect",

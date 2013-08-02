@@ -17,6 +17,9 @@ var EventEmitter = require('events').EventEmitter,
       util = require("util");
 
 var modelObj = {
+  global: {
+    authClientCredential: {type: 'set', refs: true}
+  },
   user: {
     _obj: {
       type: 'hash',
@@ -26,7 +29,7 @@ var modelObj = {
 	given_name: {html: 'input', mandatory: true},
 	middle_name: {html: 'input', mandatory: false},
 	family_name: {html: 'input', mandatory: true},
-	profile: {mandatory: false}
+	profile: {mandatory: false},
 	email: {html: 'input', mandatory: true},
 	password: {html: 'password'},
 	openidProvider: {mandatory: false},
@@ -49,7 +52,8 @@ var modelObj = {
 	image: {mandatory: false},
 	user: {mandatory: true}
       }
-    }
+    },
+    redirect_uris: {type: 'set'}
   },
   consent: {
     _obj: {
@@ -86,7 +90,7 @@ var modelObj = {
       props: {
 	token: {mandatory: true},
 	type: {mandatory: true},
-	idToken: {mandatory: true},
+	idToken: {mandatory: false},
 	expiresIn: {mandatory: false},
 	scope: {mandatory: true},
 	clientId: {mandatory: true},
@@ -193,18 +197,44 @@ OpenIDConnect.prototype.errorHandle = function(res, uri, error, desc) {
 };
 
 
-OpenIDConnect.prototype.getParams = function(req, res, spec) {
+OpenIDConnect.prototype.parseParams = function(req, res, spec) {
   var params = {};
   var r = req.query.redirect_uri || req.body.redirect_uri;
   for(var i in spec) {
     var x = req.query[i] || req.body[i] || false;
-    if(!x && spec[i] !== false) {
-      throw {type: 'error', uri: r, error: 'invalid_request', msg: 'Parameter '+x+' is mandatory.'};
-      //self.errorHandle(res, r, 'invalid_request', 'Parameter '+x+' is mandatory.');
-      //return;
-    }
     if(x) {
       params[i] = x;
+    }
+  }
+  
+  for(var i in spec) {
+    var x = params[i];
+    if(!x) {
+      var error = false;
+      if(typeof spec[i] == 'boolean') {
+	error = spec[i];
+      } else if (typeof spec[i] == 'object') {
+	for(var j in spec[i]) {
+	  if(!util.isArray(spec[i][j])) {
+	    spec[i][j] = [spec[i][j]];
+	  }
+	  spec[i][j].forEach(function(e) {
+	    if(!error) {
+	      if(util.isRegExp(e)) {
+		error = e.test(params[j]);
+	      } else {
+		error = e == params[j];
+	      }
+	    }
+	  });
+	}
+      }
+      
+      if(error) {
+	throw {type: 'error', uri: r, error: 'invalid_request', msg: 'Parameter '+x+' is mandatory.'};
+	//self.errorHandle(res, r, 'invalid_request', 'Parameter '+x+' is mandatory.');
+	//return;
+      }
     }
   }
   return params;
@@ -241,7 +271,7 @@ OpenIDConnect.prototype.auth = function() {
   var redis = this.redisClient;
   return [
     function(req, res, next) {
-      Q(self).post('getParams', [req, res, spec])
+      Q(self).post('parseParams', [req, res, spec])
       .then(function(params) {
 	//Step 1: Check if user is logged in
 	
@@ -257,19 +287,31 @@ OpenIDConnect.prototype.auth = function() {
 	
 	var deferred = Q.defer();
 	switch(params.response_type) {
+	  case 'none':
 	  case 'code':
-	    self.searchClient(params.client_id, function(err, reply){
-	      if(err || !reply || reply == '') {
-		deferred.reject({type: 'error', uri: params.redirect_uri, error: 'invalid_client', msg: 'Client '+params.client_id+' doesn\'t exist.'});
-	      } else {
-		req.session.redis_client_id = reply;
-		deferred.resolve(params);
-	      }
-	    });
+	  case 'token':
+	  case 'id_token':
 	    break;
 	  default:
-	    throw {type: 'error', uri: params.redirect_uri, error: 'unsupported_response_type', msg: 'Response type '+options.response_type+' not supported.'};
-	}
+	    var error = false;
+	    var sp = params.response_type.split(' ');
+	    sp.forEach(function(response_type) {
+	      if(['code', 'token', 'id_token'].indexOf(response_type) == -1) {
+		throw {type: 'error', uri: params.redirect_uri, error: 'unsupported_response_type', msg: 'Response type '+response_type+' not supported.'};
+	      }
+	    });
+	}	    
+	self.searchClient(params.client_id, function(err, reply){
+	  if(err || !reply || reply == '') {
+	    deferred.reject({type: 'error', uri: params.redirect_uri, error: 'invalid_client', msg: 'Client '+params.client_id+' doesn\'t exist.'});
+	  } else {
+	    req.session.redis_client_id = reply;
+	    this.get(function(err, obj) {
+	      req.session.redis_client_secret = obj.secret;
+	      deferred.resolve(params);
+	    });
+	  }
+	});
 	return deferred.promise;
       }).then(function(params){
 	//Step 3: Check if scopes are valid, and if consent was given.
@@ -318,45 +360,133 @@ OpenIDConnect.prototype.auth = function() {
 	});
 	return deferred.promise;
       }).then(function(params){
-	//Step 5: create authorization code
-	
-	var createToken = function() {
-	  var token = hashlib.md5(Math.random());
-	  redis.sismember(self.options.redis_prefix+'tokens', token, function(err, response) {
-	    if(!response) {
-	      redis.sadd(self.options.redis_prefix+'tokens', token);
-	      setToken(token);
-	    } else {
-	      createToken();
+	//Step 5: create responses
+	if(params.response_type == 'none') {
+	  return {params: params, resp: {}};
+	} else {	
+	  var deferred = Q.defer();
+	  var promises = [];
+	  
+	  var rts = params.response_type.split(' ');
+	  
+	  rts.forEach(function(rt) {
+	    var def = Q.defer();
+	    promises.push(def.promise);
+	    switch(rt) {
+	      case 'code':
+		var createToken = function() {
+		  var token = hashlib.md5(Math.random());
+		  redis.sismember(self.options.redis_prefix+'tokens', token, function(err, response) {
+		    if(!response) {
+		      redis.sadd(self.options.redis_prefix+'tokens', token);
+		      setToken(token);
+		    } else {
+		      createToken();
+		    }
+		  });
+		};
+		var setToken = function(token) {
+		  var p = new self.model.auth({
+		    clientId: params.client_id,
+		    scope: params.scope,
+		    user: req.session.user,
+		    code: token,
+		    redirectUri: params.redirect_uri,
+		    responseType: params.response_type,
+		    status: 'created'
+		  });
+		  setTimeout(function() {
+		    p.getStatus(function(err, response) { 
+		      if(response == 'created') {
+			p.del();
+			redis.srem(self.options.redis_prefix+'tokens', token);
+		      }
+		    });
+		  }, 1000*60*10); //10 minutes
+		  def.resolve({code: token});
+		};
+		createToken();
+		break;
+	      case 'id_token':
+		var d = Math.round(new Date().getTime()/1000);
+		var id_token = {
+		  iss: req.protocol+'://'+req.headers.host,
+		  sub: req.session.user,
+		  aud: params.client_id,
+		  exp: d+3600,
+		  iat: d
+		};
+		def.resolve({id_token: jwt.encode(id_token, req.session.redis_client_secret)});
+		break;
+	      case 'token':
+		var createToken = function() {
+		  var token = hashlib.md5(Math.random());
+		  redis.sismember(self.options.redis_prefix+'tokens', token, function(err, response) {
+		    if(!response) {
+		      redis.sadd(self.options.redis_prefix+'tokens', token);
+		      setToken(token);
+		    } else {
+		      createToken();
+		    }
+		  });
+		};
+		var setToken = function(token) {
+		  var obj = {
+		    token: token,
+		    type: 'Bearer',
+		    expiresIn: 3600,
+		    user: req.session.user,
+		    clientId: params.client_id,
+		    scope: params.scope
+		  };
+		  new self.model.access(obj, function(err, id) {
+		    if(!err && id) {
+		      var a = this;
+
+		      setTimeout(function() {
+			a.del();
+			redis.srem(self.options.redis_prefix+'tokens', token);
+		      }, 1000*3600); //1 hour		
+		      
+		      def.resolve({
+			access_token: obj.token,
+			token_type: obj.type,
+			expires_in: obj.expiresIn
+		      });
+		    }
+		  });
+		};
+		createToken();
+		break;
 	    }
 	  });
-	};
-	var setToken = function(token) {
-	  var p = new self.model.auth({
-	    clientId: params.client_id,
-	    scope: params.scope,
-	    user: req.session.user,
-	    code: token,
-	    redirectUri: params.redirect_uri,
-	    responseType: params.response_type,
-	    status: 'created'
+	  
+	  Q.allSettled(promises).then(function(results) {
+	    var resp = {};
+	    for(var i in results) {
+	      resp = extend(resp, results[i].value||{});
+	    }
+	    deferred.resolve({params: params, type: params.response_type != 'code'?'f':'q', resp: resp});
 	  });
-	  setTimeout(function() {
-	    p.getStatus(function(err, response) { 
-	      if(response == 'created') {
-		p.del();
-		redis.srem(self.options.redis_prefix+'tokens', token);
-	      }
-	    });
-	  }, 1000*60*10); //10 minutes
-	  var uri = url.parse(params.redirect_uri, true);
-	  uri.query.code = token;
-	  if(params.state) {
-	    uri.query.state = params.state;
+	  
+	  return deferred.promise;
+	}
+      })
+      .then(function(obj) {
+	var params = obj.params;
+	var resp = obj.resp;
+	var uri = url.parse(params.redirect_uri, true);
+	if(params.state) {
+	  resp.state = params.state;
+	}
+	if(params.redirect_uri) {
+	  if(obj.type == 'f') {
+	    uri.hash = querystring.stringify(resp);
+	  } else {
+	    uri.query = resp;
 	  }
 	  res.redirect(url.format(uri));
-	};
-	createToken();
+	}
       })
       .catch(function(error) {
 	if(error.type == 'error') {
@@ -423,7 +553,7 @@ OpenIDConnect.prototype.token = function() {
   var redis = this.redisClient;
   
   return function(req, res, next) {
-    var params = self.getParams(req, res, spec);
+    var params = self.parseParams(req, res, spec);
     
     params.client_id = req.body.client_id;
     params.client_secret = req.body.client_secret;
@@ -451,8 +581,8 @@ OpenIDConnect.prototype.token = function() {
       .then(function() {
 	//Step 2: check if client and secret are valid
 	var deferred = Q.defer();
-	self.searchClient(params.client_id, function(err, reply){
-	  if(err || !reply || reply == '') {
+	self.searchClient(params.client_id, function(err, redis_client_id){
+	  if(err || !redis_client_id || redis_client_id == '') {
 	    deferred.reject({type: 'error', error: 'invalid_client', msg: 'Client doesn\'t exist or invalid secret.'});
 	  } else {
 	    this.getSecret(function(err, secret) {
@@ -568,12 +698,32 @@ OpenIDConnect.prototype.token = function() {
 	      return obj;
 	    });
 	    break;
+	  case 'client_credentials':
+	    self.model.global.getRefAuthClientCredential(function(err, response) {
+	      if(!util.isArray(response)) {
+		response = [response];
+	      }
+	      var inList = false;
+	      for(var i = 0; i<response.lenght; i++) {
+		if(client.id == response[i].id) {
+		  inList = true;
+		  break;
+		}
+	      }
+	      if(!inList) {
+		deferred.reject({type: 'error', error: 'unauthorized_client', msg: 'Client cannot use this grant type.'});
+	      } else {
+		deferred.resolve({scope: params.scope, auth: false});
+	      }
+	    });
+	    return deferred.promise;
+	    break;
 	}
 	
       })
       .then(function(obj) {
 	//Check if code was issued for client
-	if(obj.clientId != params.client_id) {
+	if(params.grant_type != 'client_credentials' && obj.clientId != params.client_id) {
 	  throw {type: 'error', error: 'invalid_grant', msg: 'The code was not issued for this client.'};
 	}
 	
@@ -604,19 +754,24 @@ OpenIDConnect.prototype.token = function() {
 	  };
 	  new self.model.refresh(obj, function(err, id) {
 	    var r = this;
-	    this.setRefAuth(auth);
-	    auth.setRefreshTokens(id);
+	    if(auth) {
+	      this.setRefAuth(auth);
+	      auth.setRefreshTokens(id);
+	    }
 	    setTimeout(function() {
 	      r.del();
-	      auth.remRefreshTokens(id, function() {
-		auth.getAccessTokens(function(err, atoks){
-		  if(atoks) return;
-		  auth.getRefreshTokens(function(err, rtoks){
-		    if(rtoks) return;
-		    auth.del();
+	      redis.srem(self.options.redis_prefix+'tokens', refresh);
+	      if(auth) {
+		auth.remRefreshTokens(id, function() {
+		  auth.getAccessTokens(function(err, atoks){
+		    if(atoks) return;
+		    auth.getRefreshTokens(function(err, rtoks){
+		      if(rtoks) return;
+		      auth.del();
+		    });
 		  });
 		});
-	      });
+	      }
 	    }, 1000*3600*5); //5 hours
 	    
 	    var d = Math.round(new Date().getTime()/1000);
@@ -633,27 +788,32 @@ OpenIDConnect.prototype.token = function() {
 	      expiresIn: 3600,
 	      user: req.session.user,
 	      clientId: params.client_id,
-	      idToken: jwt.encode(id_token, 'some key!!!!'),
+	      idToken: jwt.encode(id_token, params.client_secret),
 	      scope: scopes
 	    };
 	    new self.model.access(obj, function(err, id) {
 	      if(!err && id) {
 		var a = this;
-		this.setRefAuth(auth);
-		auth.setAccessTokens(id);
-		auth.setStatus('used');
+		if(auth) {
+		  this.setRefAuth(auth);
+		  auth.setAccessTokens(id);
+		  auth.setStatus('used');
+		}
 
 		setTimeout(function() {
 		  a.del();
-		  auth.remAccessTokens(id, function() {
-		    auth.getAccessTokens(function(err, atoks){
-		      if(atoks) return;
-		      auth.getRefreshTokens(function(err, rtoks){
-			if(rtoks) return;
-			auth.del();
+		  redis.srem(self.options.redis_prefix+'tokens', access);
+		  if(auth) {
+		    auth.remAccessTokens(id, function() {
+		      auth.getAccessTokens(function(err, atoks){
+			if(atoks) return;
+			auth.getRefreshTokens(function(err, rtoks){
+			  if(rtoks) return;
+			  auth.del();
+			});
 		      });
 		    });
-		  });
+		  }
 		}, 1000*3600); //1 hour		
 		
 		res.json({
@@ -690,19 +850,15 @@ OpenIDConnect.prototype.token = function() {
  * 
  * returns a function to be placed as middleware in connect/express routing methods. For example:
  * 
- * app.get('/api/user', oidc.check(true, 'openid', /profile|email/), function(req, res, next) { ... });
+ * app.get('/api/user', oidc.check('openid', /profile|email/), function(req, res, next) { ... });
  * 
- * If the first argument is a boolean and equals 'true', checks if user is logged in.
+ * If no arguments are given, checks if user is logged in.
  * 
  * The other arguments may be of type string or regexp.
  * 
  * This function is used to check if user logged in, if an access_token is present, and if certain scopes where granted to it.
  */
 OpenIDConnect.prototype.check = function() {
-  var login = false;
-  if(arguments[1] && typeof arguments[1] == 'boolean') {
-    login = Array.prototype.shift.call(arguments);
-  }
   var scopes = Array.prototype.slice.call(arguments, 0);
   if(!util.isArray(scopes)) {
     scopes = [scopes];
@@ -713,8 +869,8 @@ OpenIDConnect.prototype.check = function() {
   };
   
   return function(req, res, next) {
-    if(req.session.user || !login) {
-      var params = self.getParams(req, res, spec);
+    if(req.session.user) {
+      var params = self.parseParams(req, res, spec);
       if(!scopes.length) {
 	next();
       } else {
@@ -725,25 +881,45 @@ OpenIDConnect.prototype.check = function() {
 	  self.model.access.reverse(params.access_token, function(err, id) {
 	    if(!err && id) {
 	      this.get(function(err, obj) {
-		var errors = [];
-		scopes.forEach(function(scope) {
-		  if(typeof scope == 'string') {
-		    if(obj.scope.indexOf(scope) == -1) {
-		      errors.push(scope);
+		if(obj.user == req.session.user) {
+		  var errors = [];
+		  scopes.forEach(function(scope) {
+		    if(typeof scope == 'string') {
+		      if(obj.scope.indexOf(scope) == -1) {
+			errors.push(scope);
+		      }
+		    } else if(util.isRegExp(scope) && !scope.test(obj.scope)){
+		      errors.push('('+scope.toString().replace(/\//g,'')+')');
 		    }
-		  } else if(util.isRegExp(scope) && !scope.test(obj.scope)){
-		    errors.push('('+scope.toString().replace(/\//g,'')+')');
+		  });
+		  if(errors.length > 1) {
+		    var last = errors.pop();
+		    self.errorHandle(res, null, 'invalid_scope', 'Required scopes '+errors.join(', ')+' and '+last+' where not granted.');
+		  } else if(errors.length > 0) {
+		    self.errorHandle(res, null, 'invalid_scope', 'Required scope '+errors.pop()+' not granted.');
+		  } else {
+		    req.session.check = req.session.check||{};
+		    req.session.check.scopes = obj.scope.split(' ');
+		    next();
 		  }
-		});
-		if(errors.length > 1) {
-		  var last = errors.pop();
-		  self.errorHandle(res, null, 'invalid_scope', 'Required scopes '+errors.join(', ')+' and '+last+' where not found.');
-		} else if(errors.length > 0) {
-		  self.errorHandle(res, null, 'invalid_scope', 'Required scope '+errors.pop()+' not found.');
 		} else {
-		  req.session.check = req.session.check||{};
-		  req.session.check.scopes = obj.scope.split(' ');
-		  next();
+		  //Delete access token, and every thing related to it.
+		  this.getRefAuth(function(err, auth) {
+		    if(!err && auth) {
+		      auth.getAccessTokens(function(err, tokens){
+			tokens.forEach(function(token) {
+			  new self.model.access(token).del();
+			});
+			auth.getRefreshTokens(function(err, tokens) {
+			  tokens.forEach(function(token) {
+			    new self.model.refresh(token).del();
+			  });
+			  auth.del();
+			});
+		      });
+		    }
+		  });
+		  self.errorHandle(res, null, 'invalid_grant', 'Access token issued for an other user.');
 		}
 	      });
 	    } else {
@@ -785,8 +961,8 @@ OpenIDConnect.prototype.userInfo = function() {
 	  } else {
 	    res.json({email: obj.email});
 	  }
-	}
-      }
+	});
+      });
     }
   ];
 };

@@ -1,6 +1,6 @@
-# OAuth 2 and OpenID/Connect server
+# OAuth 2 Server with OpenID Connect support
 
-This is an OAuth 2 server implementation with support for OpenID/Connect specification. Based on https://github.com/ammmir/node-oauth2-provider.
+This is an fully functional OAuth 2 server implementation, with support for OpenID Connect specification. Based on https://github.com/ammmir/node-oauth2-provider.
 
 ## Install
 
@@ -14,7 +14,7 @@ Be sure to enable the `bodyParser` and `query` middleware.
 To use it inside your project, just do:
 
 ```
-var oidc = require('openid-connect').oidc();
+var oidc = require('openid-connect').oidc(options);
 ```
 
 and then, for example, with express
@@ -22,6 +22,25 @@ and then, for example, with express
 ```
 app.get('/authorization', oidc.auth());
 ```
+## Options
+
+When you require openid-connect, you may specify options. If you specify them, it must be with a json object with the following properties (all of them are optional):
+
+* __login_url__
+
+  URL where login form can be found. Defaults to _"/login"_.
+
+* __consent_url__
+
+  URL where consent form can be found. Defaults to _"/consent"_.
+
+* __scopes__
+
+  Json object of type { _scope name_: _scope description_, ... } used to define custom scopes. 
+
+* __redis_prefix__
+
+  prefix for redis keys. Defaults to _"oidc:"_.
 
 ## API
 
@@ -106,4 +125,4 @@ app.get('/authorization', oidc.auth());
  
 ## Example
 
-Complete example soon.
+There is a complete example [here](https://github.com/agmoyano/OpenIDConnect/tree/master/examples).

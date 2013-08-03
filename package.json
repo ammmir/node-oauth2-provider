@@ -1,8 +1,8 @@
 {
   "name": "openid-connect",
-  "version": "0.1.0",
-  "keywords": ["oauth", "oauth2", "server", "openid", "connect", "openid/connect"],
-  "description": "This is an OAuth 2 server implementation with support for OpenID/Connect specification. Based on https://github.com/ammmir/node-oauth2-provider.",
+  "version": "0.1.1",
+  "keywords": ["oauth", "oauth2", "oauth2 server", "oauth2 provider", "openid server", "identity provider", "server", "openid", "connect", "openid connect"],
+  "description": "This is an fully functional OAuth 2 server implementation, with support for OpenID Connect specification. Based on https://github.com/ammmir/node-oauth2-provider.",
   "homepage": "https://github.com/agmoyano/OpenIDConnect",
   "repository": {
     "type": "git",
@@ -18,6 +18,9 @@
     "redis-modelize": "0.0.1",
     "q": "0.9.6",
     "jwt-simple": "0.1.0"
+  },
+  "directories": {
+    "example": "./examples"
   },
   "licenses": [
     {

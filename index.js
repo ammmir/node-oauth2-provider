@@ -114,12 +114,8 @@ var modelObj = {
 };
 
 var defaults = {
-  authorize_uri: '/authorize',
-  token_uri: '/token',
-  login_uri: '/login',
-  create_user_uri: '/create_user',
-  register_app_uri: '/register_app',
-  consent_uri: '/consent',
+  login_url: '/login',
+  consent_url: '/consent',
   scopes: {
     openid: 'Informs the Authorization Server that the Client is making an OpenID Connect request.', 
     profile:'Access to the End-User\'s default profile Claims.', 
@@ -280,7 +276,7 @@ OpenIDConnect.prototype.auth = function() {
 	  return params;
 	} else {
 	  var q = req.path+'?'+querystring.stringify(params);
-	  throw {type: 'redirect', uri: self.options.login_uri+'?'+querystring.stringify({return_url: q})};  
+	  throw {type: 'redirect', uri: self.options.login_url+'?'+querystring.stringify({return_url: q})};  
 	}
       }).then(function(params) {
 	//Step 2: Check if response_type is supported and client_id is valid.
@@ -353,7 +349,7 @@ OpenIDConnect.prototype.auth = function() {
 	  if(redirect) {
 	    req.session.client_id = params.client_id;
 	    var q = req.path+'?'+querystring.stringify(params);
-	    deferred.reject({type: 'redirect', uri: self.options.consent_uri+'?'+querystring.stringify({return_url: q})});
+	    deferred.reject({type: 'redirect', uri: self.options.consent_url+'?'+querystring.stringify({return_url: q})});
 	  } else {
 	    deferred.resolve(params);
 	  }
@@ -575,7 +571,7 @@ OpenIDConnect.prototype.token = function() {
 	  return true;
 	} else {
 	  var q = req.path+'?'+querystring.stringify(params);
-	  throw {type: 'redirect', uri: self.options.login_uri+'?'+querystring.stringify({return_url: q})};  
+	  throw {type: 'redirect', uri: self.options.login_url+'?'+querystring.stringify({return_url: q})};  
 	}
       })
       .then(function() {
@@ -931,9 +927,8 @@ OpenIDConnect.prototype.check = function() {
 	}
       }
     } else {
-      var q = req.path+'?'+querystring.stringify(params);
       req.session.error = 'You must login to enter.';
-      throw {type: 'redirect', uri: self.options.login_uri+'?'+querystring.stringify({return_url: q})};  
+      throw {type: 'redirect', uri: self.options.login_url+'?'+querystring.stringify({return_url: req.url})};  
     }
   };
 };

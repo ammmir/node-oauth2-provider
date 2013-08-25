@@ -49,9 +49,9 @@ function OAuth2Provider(options) {
 
 OAuth2Provider.prototype = new EventEmitter();
 
-OAuth2Provider.prototype.generateAccessToken = function(user_id, client_id, extra_data) {
+OAuth2Provider.prototype.generateAccessToken = function(user_id, client_id, scope) {
   var out = {
-    access_token: this.serializer.stringify([user_id, client_id, +new Date, extra_data]),
+    access_token: this.serializer.stringify([user_id, client_id, +new Date, scope]),
     refresh_token: null,
   };
 
@@ -62,7 +62,7 @@ OAuth2Provider.prototype.login = function() {
   var __self = this;
 
   return function(req, res, next) {
-    var data, atok, user_id, client_id, grant_date, extra_data;
+    var data, atok, user_id, client_id, grant_date, scope;
 
     if(req.query['access_token'] || req.body['access_token']) {
       atok = req.query['access_token'] || req.body['access_token'];
@@ -77,7 +77,7 @@ OAuth2Provider.prototype.login = function() {
       user_id = data[0];
       client_id = data[1];
       grant_date = new Date(data[2]);
-      extra_data = data[3];
+      scope = data[3];
     } catch(e) {
       res.writeHead(400);
       return res.end(e.message);
@@ -86,7 +86,7 @@ OAuth2Provider.prototype.login = function() {
     __self.emit('access_token', req, {
       user_id: user_id,
       client_id: client_id,
-      extra_data: extra_data,
+      scope: scope,
       grant_date: grant_date
     }, next);
   };
@@ -165,8 +165,8 @@ OAuth2Provider.prototype.oauth = function() {
                         res.writeHead(500);
                         return res.end(e.message);
                     }
-                    self.emit('create_access_token', user_id, client_id, function(extra_data) {
-                        var atok = self.generateAccessToken(user_id, client_id, extra_data);
+                    self.emit('create_access_token', req, user_id, client_id, function(scope) {
+                        var atok = self.generateAccessToken(user_id, client_id, scope);
                         if (self.listeners('save_access_token').length > 0) self.emit('save_access_token', user_id, client_id, atok);
                         url += querystring.stringify(atok);
                         res.writeHead(303, {
@@ -233,7 +233,7 @@ OAuth2Provider.prototype.oauth = function() {
 
           res.writeHead(200, {'Content-type': 'application/json'});
 
-          self._createAccessToken(user_id, client_id, function(atok) {
+          self._createAccessToken(req, user_id, client_id, function(atok) {
             res.end(JSON.stringify(atok));
           });
         });
@@ -246,7 +246,7 @@ OAuth2Provider.prototype.oauth = function() {
 
           res.writeHead(200, {'Content-type': 'application/json'});
 
-          self._createAccessToken(user_id, client_id, function(atok) {
+          self._createAccessToken(req, user_id, client_id, function(atok) {
             self.emit('remove_grant', user_id, client_id, code);
 
             res.end(JSON.stringify(atok));
@@ -260,14 +260,14 @@ OAuth2Provider.prototype.oauth = function() {
   };
 };
 
-OAuth2Provider.prototype._createAccessToken = function(user_id, client_id, cb) {
+OAuth2Provider.prototype._createAccessToken = function(req, user_id, client_id, cb) {
   var self = this;
 
-  this.emit('create_access_token', user_id, client_id, function(extra_data) {
-    var atok = self.generateAccessToken(user_id, client_id, extra_data);
+  this.emit('create_access_token', req, user_id, client_id, function(scope) {
+    var atok = self.generateAccessToken(user_id, client_id, scope);
 
     if(self.listeners('save_access_token').length > 0)
-      self.emit('save_access_token', user_id, client_id, atok);
+      self.emit('save_access_token', user_id, client_id, atok, scope);
 
     return cb(atok);
   });

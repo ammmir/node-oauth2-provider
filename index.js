@@ -100,9 +100,10 @@ OAuth2Provider.prototype.oauth = function() {
 
     if(req.method == 'GET' && self.options.authorize_uri == uri) {
       var    client_id = req.query.client_id,
-          redirect_uri = req.query.redirect_uri;
-
-      if(!client_id || !redirect_uri) {
+          redirect_uri = req.query.redirect_uri,
+         scope = (req.query.scope || "basic");
+      
+      if(!client_id || !redirect_uri || !scope) {
         res.writeHead(400);
         return res.end('client_id and redirect_uri required');
       }
@@ -110,15 +111,16 @@ OAuth2Provider.prototype.oauth = function() {
       // authorization form will be POSTed to same URL, so we'll have all params
       var authorize_url = req.url;
 
-      self.emit('enforce_login', req, res, authorize_url, function(user_id) {
+      self.emit('enforce_login', req, res, authorize_url, scope, function(user_id) {
         // store user_id in an HMAC-protected encrypted query param
         authorize_url += '&' + querystring.stringify({x_user_id: self.serializer.stringify(user_id)});
-
-        self.emit('before_authorize_form', req, res,client_id, function() {
-            self.emit('authorize_form', req, res, client_id, authorize_url);
+        
+        //fires when use allows app
+        self.emit('before_authorize_form', req, res, client_id, scope, function() {
+            self.emit('authorize_form', req, res, client_id, authorize_url, scope);
         },function(){
             var code = serializer.randomString(128);
-            self.emit('save_grant', req, client_id, code, function() {
+            self.emit('save_grant', req, client_id, code, scope, function() {
                 var extras = {
                     code: code,
                 };
@@ -136,7 +138,9 @@ OAuth2Provider.prototype.oauth = function() {
       });
 
     } else if(req.method == 'POST' && self.options.authorize_uri == uri) {
+        //fires when use allows app
         var client_id = (req.query.client_id || req.body.client_id),
+            scope = (req.query.scope || req.body.scope || "basic"),
             redirect_uri = (req.query.redirect_uri || req.body.redirect_uri),
             response_type = (req.query.response_type || req.body.response_type) || 'code',
             state = (req.query.state || req.body.state),
@@ -154,7 +158,7 @@ OAuth2Provider.prototype.oauth = function() {
             return res.end('invalid response_type requested');
         }
         if ('allow' in req.body) {
-            self.emit('after_authorize_form', req, res, client_id,function(){
+            self.emit('after_authorize_form', req, res, client_id, scope,function(){
                 if ('token' == response_type) {
                     var user_id;
                     try {
@@ -165,7 +169,7 @@ OAuth2Provider.prototype.oauth = function() {
                         res.writeHead(500);
                         return res.end(e.message);
                     }
-                    self.emit('create_access_token', req, user_id, client_id, function(scope) {
+                    //self.emit('create_access_token', req, user_id, client_id, scope, function(scope) {
                         var atok = self.generateAccessToken(user_id, client_id, scope);
                         if (self.listeners('save_access_token').length > 0) self.emit('save_access_token', user_id, client_id, atok);
                         url += querystring.stringify(atok);
@@ -173,11 +177,11 @@ OAuth2Provider.prototype.oauth = function() {
                             Location: url
                         });
                         res.end();
-                    });
+                    //});
                 }
                 else {
                     var code = serializer.randomString(128);
-                    self.emit('save_grant', req, client_id, code, function() {
+                    self.emit('save_grant', req, client_id, code, scope, function() {
                         var extras = {
                             code: code,
                         };
@@ -202,11 +206,11 @@ OAuth2Provider.prototype.oauth = function() {
             res.end();
         }
     } else if(req.method == 'POST' && self.options.access_token_uri == uri) {
-      var     client_id = req.body.client_id || req.query.client_id,
-          client_secret = req.body.client_secret || req.query.client_secret,
-           redirect_uri = req.body.redirect_uri || req.query.redirect_uri,
-                   code = req.body.code || req.query.code;
-
+      var   client_id = req.body.client_id || req.query.client_id,
+            redirect_uri = req.body.redirect_uri || req.query.redirect_uri,
+            client_secret = req.body.client_secret || req.query.client_secret,
+            code = req.body.code || req.query.code;
+    
       if(!client_id || !client_secret) {
         var authorization = parse_authorization(req.headers.authorization);
 
@@ -218,14 +222,15 @@ OAuth2Provider.prototype.oauth = function() {
         client_id = authorization[0];
         client_secret = authorization[1];
       }
-
+        
+        //post auth
       if('password' == req.body.grant_type) {
         if(self.listeners('client_auth').length == 0) {
           res.writeHead(401);
           return res.end('client authentication not supported');
         }
 
-        self.emit('client_auth', client_id, client_secret, req.body.username, req.body.password, function(err, user_id) {
+        self.emit('client_auth', client_id, client_secret, req.body.username, req.body.password, function(err, user_id, scope) {
           if(err) {
             res.writeHead(401);
             return res.end(err.message);
@@ -233,12 +238,13 @@ OAuth2Provider.prototype.oauth = function() {
 
           res.writeHead(200, {'Content-type': 'application/json'});
 
-          self._createAccessToken(req, user_id, client_id, function(atok) {
+          self._createAccessToken(scope, user_id, client_id, function(atok) {
+              self.emit('remove_grant', user_id, client_id, code, scope);
             res.end(JSON.stringify(atok));
           });
         });
       } else {
-        self.emit('lookup_grant', client_id, client_secret, code, function(err, user_id) {
+        self.emit('lookup_grant', client_id, client_secret, code, function(err, user_id, scope) {
           if(err) {
             res.writeHead(400);
             return res.end(err.message);
@@ -246,8 +252,8 @@ OAuth2Provider.prototype.oauth = function() {
 
           res.writeHead(200, {'Content-type': 'application/json'});
 
-          self._createAccessToken(req, user_id, client_id, function(atok) {
-            self.emit('remove_grant', user_id, client_id, code);
+          self._createAccessToken(scope, user_id, client_id, function(atok) {
+            self.emit('remove_grant', user_id, client_id, code, scope);
 
             res.end(JSON.stringify(atok));
           });
@@ -260,17 +266,17 @@ OAuth2Provider.prototype.oauth = function() {
   };
 };
 
-OAuth2Provider.prototype._createAccessToken = function(req, user_id, client_id, cb) {
+OAuth2Provider.prototype._createAccessToken = function(scope, user_id, client_id, cb) {
   var self = this;
 
-  this.emit('create_access_token', req, user_id, client_id, function(scope) {
+  //this.emit('create_access_token', req, user_id, client_id, function(scope) {
     var atok = self.generateAccessToken(user_id, client_id, scope);
 
     if(self.listeners('save_access_token').length > 0)
       self.emit('save_access_token', user_id, client_id, atok, scope);
 
     return cb(atok);
-  });
+  //});
 };
 
 exports.OAuth2Provider = OAuth2Provider;

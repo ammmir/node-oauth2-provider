@@ -1,6 +1,6 @@
 # OAuth 2 Server with OpenID Connect support
 
-This is an fully functional OAuth 2 server implementation, with support for OpenID Connect specification. Based on https://github.com/ammmir/node-oauth2-provider.
+This is a fully functional OAuth 2 server implementation, with support for OpenID Connect specification. Based on https://github.com/ammmir/node-oauth2-provider.
 
 ## Install
 
@@ -126,3 +126,9 @@ When you require openid-connect, you may specify options. If you specify them, i
 ## Example
 
 There is a complete example [here](https://github.com/agmoyano/OpenIDConnect/tree/master/examples).
+
+## Help!
+
+Any suggestions, bug reports, bug fixes, etc, are very wellcome. 
+
+Thanks for reading!.

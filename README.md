@@ -129,6 +129,6 @@ There is a complete example [here](https://github.com/agmoyano/OpenIDConnect/tre
 
 ## Help!
 
-Any suggestions, bug reports, bug fixes, etc, are very wellcome. 
+Any suggestions, bug reports, bug fixes, etc, are very wellcome ([here](https://github.com/agmoyano/OpenIDConnect/issues)). 
 
 Thanks for reading!.

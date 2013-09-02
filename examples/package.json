@@ -1,0 +1,12 @@
+{
+  "name": "openid-connect-example",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "start": "node openid-connect-example.js"
+  },
+  "dependencies": {
+    "express": "3.2.5",
+    "connect-redis": "*"
+  }
+}

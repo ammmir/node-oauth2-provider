@@ -44,13 +44,13 @@ app.get('/', function(req, res) {
 });
 
 //Login form (I use email as user name)
-app.get('/my/login', function(req, res, next() {
+app.get('/my/login', function(req, res, next) {
   var head = '<head><title>Login</title></head>';
   var inputs = '<input type="text" name="user" placeholder="Enter Email"/><input type="password" name="password" placeholder="Enter Password"/>';
   var error = req.session.error?'<div>'+req.session.error+'</div>':'';
   var body = '<body><h1>Login</h1><form method="POST">'+inputs+'<input type="submit"/></form>'+error;
   res.send('<html>'+head+body+'</html>');
-}));
+});
 
 //process login
 app.post('/my/login', function(req, res, next) {
@@ -104,7 +104,7 @@ app.get('/user/create', function(req, res, next) {
   var fields = mkFields(oidc.getUserParams());
   for(var i in fields) {
     inputs += '<div><label for="'+i+'">'+fields[i].label+'</label>'+fields[i].html+'</div>';
-  });
+  }
   var error = req.session.error?'<div>'+req.session.error+'</div>':'';
   var body = '<body><h1>Sign in</h1><form method="POST">'+inputs+'<input type="submit"/></form>'+error;
   res.send('<html>'+head+body+'</html>');
@@ -166,7 +166,7 @@ app.get('/client/register', oidc.check(), function(req, res, next) {
 	var fields = mkFields(params);
 	for(var i in fields) {
 	  inputs += '<div><label for="'+i+'">'+fields[i].label+'</label>'+fields[i].html+'</div>';
-	});
+	}
 	var error = req.session.error?'<div>'+req.session.error+'</div>':'';
 	var body = '<body><h1>Register Client</h1><form method="POST">'+inputs+'<input type="submit"/></form>'+error;
 	res.send('<html>'+head+body+'</html>');
@@ -224,6 +224,7 @@ function mkFields(params) {
 	  for(var j=0; j<params[i].ops; j++) {
 	    fields[i].html += '<input class="form-control" type="radio" id="'+i+'_'+j+'" name="'+i+'" '+(params[i].mandatory?' required':'')+'/> '+params[i].ops[j];
 	  }
+    break;
 	default:
 	  fields[i].html = '<input class="form-control" type="text" id="'+i+'" name="'+i+'" placeholder="'+fields[i].label+'"'+(params[i].mandatory?' required':'')+'/>';
 	  break;

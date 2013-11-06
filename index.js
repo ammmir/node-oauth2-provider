@@ -172,8 +172,8 @@ OAuth2Provider.prototype.oauth = function() {
           self.emit('create_access_token', user_id, client_id, function(extra_data,token_options) {
             var atok = self.generateAccessToken(user_id, client_id, extra_data, token_options);
 
-            if(self.listeners('save_access_token').length > 0)
-              self.emit('save_access_token', user_id, client_id, atok);
+            for(listener in self.listeners('save_access_token'))
+              listener(user_id, client_id, atok);
 
             url += querystring.stringify(atok);
 
@@ -270,8 +270,8 @@ OAuth2Provider.prototype._createAccessToken = function(user_id, client_id, cb) {
   this.emit('create_access_token', user_id, client_id, function(extra_data, token_options) {
     var atok = self.generateAccessToken(user_id, client_id, extra_data, token_options);
 
-    if(self.listeners('save_access_token').length > 0)
-      self.emit('save_access_token', user_id, client_id, atok);
+    for(var listener in self.listeners('save_access_token'))
+      listener('save_access_token', user_id, client_id, atok);
 
     return cb(atok);
   });

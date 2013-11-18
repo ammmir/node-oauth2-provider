@@ -108,7 +108,7 @@ app.get('/user/create', function(req, res, next) {
   var error = req.session.error?'<div>'+req.session.error+'</div>':'';
   var body = '<body><h1>Sign in</h1><form method="POST">'+inputs+'<input type="submit"/></form>'+error;
   res.send('<html>'+head+body+'</html>');
-}, routes.create_user);
+});
 
 //process user creation
 app.post('/user/create', function(req, res, next) {
@@ -178,7 +178,7 @@ app.get('/client/register', oidc.check(), function(req, res, next) {
     });
   };
   mkId(req.session.user+Math.random());
-}, routes.create_client);
+});
 
 //process client register
 app.post('/client/register', oidc.check(), function(req, res, next) {

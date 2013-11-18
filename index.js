@@ -9,7 +9,8 @@
 var EventEmitter = require('events').EventEmitter,
 querystring = require('querystring'),
 //serializer = require('serializer'),
-hashlib = require('hashlib2'),
+//hashlib = require('hashlib2'),
+crypto = require('crypto'),
 extend = require('extend'),
 url = require('url'),
 Q = require('q'),
@@ -370,7 +371,7 @@ OpenIDConnect.prototype.auth = function() {
 	        				switch(rt) {
 	        				case 'code':
 	        					var createToken = function() {
-	        					var token = hashlib.md5(Math.random());
+	        					var token = crypto.createHash('md5').update(Math.random()).digest();
 	        					redis.sismember(self.options.redis_prefix+'tokens', token, function(err, response) {
 	        						if(!response) {
 	        							redis.sadd(self.options.redis_prefix+'tokens', token);
@@ -415,7 +416,7 @@ OpenIDConnect.prototype.auth = function() {
 	        					break;
 	        				case 'token':
 	        					var createToken = function() {
-	        					var token = hashlib.md5(Math.random());
+	        					var token = crypto.createHash('md5').update(Math.random()).digest();
 	        					redis.sismember(self.options.redis_prefix+'tokens', token, function(err, response) {
 	        						if(!response) {
 	        							redis.sadd(self.options.redis_prefix+'tokens', token);
@@ -731,7 +732,7 @@ OpenIDConnect.prototype.token = function() {
 				var auth = obj.auth;
 
 				var createToken = function(cb) {
-					var token = hashlib.md5(Math.random());
+					var token = crypto.createHash('md5').update(Math.random()).digest();
 					redis.sismember(self.options.redis_prefix+'tokens', token, function(err, response) {
 						if(!response) {
 							redis.sadd(self.options.redis_prefix+'tokens', token);

@@ -1,7 +1,18 @@
 {
   "name": "openid-connect",
-  "version": "0.1.4",
-  "keywords": ["oauth", "oauth2", "oauth2 server", "oauth2 provider", "openid server", "identity provider", "server", "openid", "connect", "openid connect"],
+  "version": "0.1.5",
+  "keywords": [
+    "oauth",
+    "oauth2",
+    "oauth2 server",
+    "oauth2 provider",
+    "openid server",
+    "identity provider",
+    "server",
+    "openid",
+    "connect",
+    "openid connect"
+  ],
   "description": "This is an fully functional OAuth 2 server implementation, with support for OpenID Connect specification. Based on https://github.com/ammmir/node-oauth2-provider.",
   "homepage": "https://github.com/agmoyano/OpenIDConnect",
   "repository": {
@@ -13,7 +24,6 @@
   },
   "main": "index",
   "dependencies": {
-    "serializer": ">=0.0.2 <0.1.0",
     "extend": "1.1.3",
     "redis-modelize": "0.0.1",
     "q": "0.9.6",
@@ -27,5 +37,8 @@
       "type": "MIT",
       "url": "https://github.com/ammmir/node-oauth2-provider/blob/master/LICENSE"
     }
-  ]
+  ],
+  "readme": "# OAuth 2 Server with OpenID Connect support\n\nThis is a fully functional OAuth 2 server implementation, with support for OpenID Connect specification. Based on https://github.com/ammmir/node-oauth2-provider.\n\n## Install\n\nInstall via npm:\n\n    npm install openid-connect\n\nYou can add it to your Connect or Express application as another middleware.\nBe sure to enable the `bodyParser` and `query` middleware.\n\nTo use it inside your project, just do:\n\n```\nvar oidc = require('openid-connect').oidc(options);\n```\n\nand then, for example, with express\n\n```\napp.get('/authorization', oidc.auth());\n```\n## Options\n\nWhen you require openid-connect, you may specify options. If you specify them, it must be with a json object with the following properties (all of them are optional):\n\n* __login_url__\n\n  URL where login form can be found. Defaults to _\"/login\"_.\n\n* __consent_url__\n\n  URL where consent form can be found. Defaults to _\"/consent\"_.\n\n* __scopes__\n\n  Json object of type { _scope name_: _scope description_, ... } used to define custom scopes. \n\n* __redis_prefix__\n\n  prefix for redis keys. Defaults to _\"oidc:\"_.\n\n## API\n\n* **auth()**\n\n  returns a function to be placed as middleware in connect/express routing methods. For example:\n\n  ```\n  app.get('/authorization', oidc.auth());\n  ```\n \n  This is the authorization endpoint, as described in [http://tools.ietf.org/html/rfc6749#section-3.1](http://tools.ietf.org/html/rfc6749#section-3.1)\n\n* **consent()**\n\n  returns a function to be placed as middleware in connect/express routing methods. For example:\n \n  ```\n  app.post('/consent', oidc.consent());\n  ```\n \n  This method saves the consent of the resource owner to a client request, or returns an access_denied error.\n\n* **token()**\n\n  returns a function to be placed as middleware in connect/express routing methods. For example:\n \n  ```\n  app.get('/token', oidc.token());\n  ```\n \n  This is the token endpoint, as described in [http://tools.ietf.org/html/rfc6749#section-3.2](http://tools.ietf.org/html/rfc6749#section-3.2)\n\n* **check(scope, ...)**\n \n  returns a function to be placed as middleware in connect/express routing methods. For example:\n \n  ```\n  app.get('/api/user', oidc.check('openid', /profile|email/), function(req, res, next) { ... });\n  ```\n\n  If no arguments are given, checks if user is logged in.\n \n  Arguments may be of type _string_ or _regexp_.\n \n  This function is used to check if user logged in, if an access_token is present, and if certain scopes where granted to it.\n\n\n* **userInfo()**\n\n  returns a function to be placed as middleware in connect/express routing methods. For example:\n\n  ```\n  app.get('/api/user', oidc.userInfo());\n  ```\n\n  This function returns the user info in a json object. Checks for scope and login are included.\n\n* **getClientParams()**\n\n  Returns an object with params defined in **_obj** property of client namespace. See <https://github.com/agmoyano/redis-modelize>.\n\n* **getUserParams()**\n\n  Returns an object with params defined in **_obj** property of user namespace. See <https://github.com/agmoyano/redis-modelize>.\n\n* **searchClient(parts, callback)**\n\n  Executes *reverse* method of client namespace. See <https://github.com/agmoyano/redis-modelize>.\n\n* **searchUser(parts, callback)**\n\n  Executes *reverse* method of user namespace. See <https://github.com/agmoyano/redis-modelize>. \n\n* **client(params, callback)**\n\n  Constructor of client namespace. See <https://github.com/agmoyano/redis-modelize>. \n\n* **user(params, callback)**\n\n  Constructor of user namespace. See <https://github.com/agmoyano/redis-modelize>. \n \n## Example\n\nThere is a complete example [here](https://github.com/agmoyano/OpenIDConnect/tree/master/examples).\n\n## Help!\n\nAny suggestions, bug reports, bug fixes, etc, are very wellcome ([here](https://github.com/agmoyano/OpenIDConnect/issues)). \n\nThanks for reading!.\n",
+  "_id": "openid-connect@0.1.4",
+  "_from": "openid-connect@*"
 }

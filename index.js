@@ -7,7 +7,8 @@
 
 var EventEmitter = require('events').EventEmitter,
      querystring = require('querystring'),
-      serializer = require('serializer');
+      serializer = require('serializer'),
+      util = require('util');
 
 _extend = function(dst,src) {
 
@@ -68,7 +69,7 @@ function OAuth2Provider(options) {
   this.serializer = serializer.createSecureSerializer(this.options.crypt_key, this.options.sign_key);
 }
 
-OAuth2Provider.prototype = new EventEmitter();
+util.inherits(OAuth2Provider, EventEmitter);
 
 OAuth2Provider.prototype.generateAccessToken = function(user_id, client_id, extra_data, token_options) {
   token_options = token_options || {}

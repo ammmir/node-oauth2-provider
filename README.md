@@ -2,6 +2,10 @@
 
 This is a fully functional OAuth 2 server implementation, with support for OpenID Connect specification. Based on https://github.com/ammmir/node-oauth2-provider.
 
+## News
+
+Major rewrite. Now we use [modelling](https://www.npmjs.org/package/modelling) for Model part.
+
 ## Install
 
 Install via npm:
@@ -38,9 +42,95 @@ When you require openid-connect, you may specify options. If you specify them, i
 
   Json object of type { _scope name_: _scope description_, ... } used to define custom scopes. 
 
-* __redis_prefix__
+* __models__
 
-  prefix for redis keys. Defaults to _"oidc:"_.
+  Models as described in [modelling](https://www.npmjs.org/package/modelling).
+  
+  Actually OpenIDConnect defines 6 models:
+  
+  * _user_: Where user data is stored (email, password, etc).
+  * _client_: Where user can register a client app that will use your project for authentication/authorization.
+  * _consent_: Where user consent of certain scopes for a particular client is stored.
+  * _auth_: Where authorization data is stored (token, expiration date, etc).
+  * _access_: Where access data is stored (token, expiration date, etc).
+  * _refresh_: Where refresh data is stored (token, expiration date, etc).
+
+  You can overwrite any part of any model of OpenIDConnect, or overwrite all of them.
+  
+  If you overwrite user model, the new model _should_ conform with [OpenID Connect Standard Claims](http://openid.net/specs/openid-connect-core-1_0.html#StandardClaims), in order to comply with the spec.
+  
+* __adapters__
+  
+  Adapters as described in [modelling](https://www.npmjs.org/package/modelling).
+  
+* __connections__
+  
+  Connections as described in [modelling](https://www.npmjs.org/package/modelling).
+  
+* __policies__
+  
+  Policies as described in [modelling](https://www.npmjs.org/package/modelling).
+  
+* __alien__
+
+  You can use your own Waterline collections with OpenIDConnect. 
+  
+  If you define an alien collection with the same name of one of the models in OpenIDConnect, the last one will be replaced.
+  
+  For example:
+  
+  ```
+  var orm = new Waterline();
+  
+  var MyUserModel = Waterline.collection.extend({
+  	identity: 'user',
+  	//Collection definition here.
+  });
+  
+  var MyUsersCarModel = Waterline.collection.extend({
+  	identity: 'car',
+  	//Collection definition here.
+  });
+  
+  var config = {
+	collections: {
+		user: MyUserModel, //replace OpenIDConnect user model. 
+		car: MyUsersCarModel //add new model
+	}
+  }
+  
+  orm.initialize(config, function(err, result) {
+  	var options = {
+  		alien: result.collections
+  	}
+  
+  	var oidc = require('openid-connect').oidc(options);
+  
+  	app.get('/cars', oidc.use(['user', 'car']), function(req, res, next) {
+  		...
+  	});
+  });
+  ```
+  
+  __Beware__ that if you replace an OpenIDConnect model, you won't be able to use _populate_ with other OpenIDConnect models.
+  
+  If you replace user model, the new model _should_ conform with [OpenID Connect Standard Claims](http://openid.net/specs/openid-connect-core-1_0.html#StandardClaims), in order to comply with the spec.
+
+* __orm__
+
+  You can replace the whole OpenIDConnect modelling instance with your own. 
+  
+  __Beware__ that you __must__ implement at _least_ all models and exept for `user` model, all attributes. 
+  
+  If in your models, you set `autoPK` to false, they __must__ have an `id` attribute that is primary key.
+  
+  _Notice_ that you can get OpenIDConnect's default models with `require('openid-connect').defaults().models`.
+  
+  ```
+  var orm = new modelling(options);
+  
+  var oidc = require('openid-connect').oidc({orm: orm});
+  ```
 
 ## API
 
@@ -99,29 +189,13 @@ When you require openid-connect, you may specify options. If you specify them, i
 
   This function returns the user info in a json object. Checks for scope and login are included.
 
-* **getClientParams()**
+* **use([name])**
 
-  Returns an object with params defined in **_obj** property of client namespace. See <https://github.com/agmoyano/redis-modelize>.
+  Same description as in [modelling](https://www.npmjs.org/package/modelling). If you defined _alien_ models or your own _orm_ you can call those models as well.
+  
+* **getOrm()**
 
-* **getUserParams()**
-
-  Returns an object with params defined in **_obj** property of user namespace. See <https://github.com/agmoyano/redis-modelize>.
-
-* **searchClient(parts, callback)**
-
-  Executes *reverse* method of client namespace. See <https://github.com/agmoyano/redis-modelize>.
-
-* **searchUser(parts, callback)**
-
-  Executes *reverse* method of user namespace. See <https://github.com/agmoyano/redis-modelize>. 
-
-* **client(params, callback)**
-
-  Constructor of client namespace. See <https://github.com/agmoyano/redis-modelize>. 
-
-* **user(params, callback)**
-
-  Constructor of user namespace. See <https://github.com/agmoyano/redis-modelize>. 
+  Retrieves current _orm_ of instance.
  
 ## Example
 
@@ -129,6 +203,6 @@ There is a complete example [here](https://github.com/agmoyano/OpenIDConnect/tre
 
 ## Help!
 
-Any suggestions, bug reports, bug fixes, etc, are very wellcome ([here](https://github.com/agmoyano/OpenIDConnect/issues)). 
+Any suggestions, bug reports, bug fixes, pull requests, etc, are very wellcome ([here](https://github.com/agmoyano/OpenIDConnect/issues)). 
 
 Thanks for reading!.

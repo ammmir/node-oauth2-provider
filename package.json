@@ -1,6 +1,6 @@
 {
   "name": "openid-connect",
-  "version": "0.1.6",
+  "version": "1.0.0",
   "keywords": [
     "oauth",
     "oauth2",
@@ -25,9 +25,12 @@
   "main": "index",
   "dependencies": {
     "extend": "1.1.3",
-    "redis-modelize": "0.0.1",
+    "sails-redis": "balderdashy/sails-redis",
+    "modelling": "*",
     "q": "0.9.6",
-    "jwt-simple": "0.1.0"
+    "jwt-simple": "0.1.0",
+    "lodash": "*",
+    "base64url": "*"
   },
   "directories": {
     "example": "./examples"

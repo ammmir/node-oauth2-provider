@@ -56,6 +56,7 @@ var defaults = {
 					identity: 'user',
 					connection: 'def',
 					schema: true,
+					policies: 'loggedIn',
 					attributes: {
 						name: {type: 'string', required: true, unique: true},
 						given_name: {type: 'string', required: true},
@@ -101,6 +102,7 @@ var defaults = {
 					identity: 'client',
 					connection: 'def',
 					schema: true,
+					policies: 'loggedIn',
 					attributes: {
 						key: {type: 'string', required: true, unique: true},
 						secret: {type: 'string', required: true, unique: true},
@@ -130,6 +132,7 @@ var defaults = {
 				consent: {
 					identity: 'consent',
 					connection: 'def',
+					policies: 'loggedIn',
 					attributes: {
 						user: {model: 'user', required: true},
 						client: {model: 'client', required: true},
@@ -139,6 +142,7 @@ var defaults = {
 				auth: {
 					identity: 'auth',
 					connection: 'def',
+					policies: 'loggedIn',
 					attributes: {
 						client: {model: 'client',	required: true},
 						scope: {type: 'array', required: true},
@@ -160,6 +164,7 @@ var defaults = {
 				access: {
 					identity: 'access',
 					connection: 'def',
+					policies: 'loggedIn',
 					attributes: {
 						token: {type: 'string', required: true},
 						type: {type: 'string', required: true},
@@ -174,6 +179,7 @@ var defaults = {
 				refresh: {
 					identity: 'refresh',
 					connection: 'def',
+					policies: 'loggedIn',
 					attributes: {
 						token: {type: 'string', required: true},
 						scope: {type: 'array', required: true},
@@ -222,6 +228,9 @@ function OpenIDConnect(options) {
 	
 	if(this.settings.orm) {
 		this.orm = this.settings.orm;
+		for(var i in this.settings.policies) {
+			this.orm.setPolicy(true, i, this.settings.policies[i]); 
+		}
 	} else {
 		
 		this.orm = new modelling({
@@ -395,10 +404,7 @@ OpenIDConnect.prototype.auth = function() {
 	return [function(req, res, next) {
 				self.endpointParams(spec, req, res, next)
 			},
-	        self.use({
-				policies:'loggedIn',
-				models: ['client', 'consent', 'auth', 'access']
-			}),
+	        self.use(['client', 'consent', 'auth', 'access']),
 	        function(req, res, next) {
 	        	Q(req.parsedParams).then(function(params) {
 	        		//Step 2: Check if response_type is supported and client_id is valid.
@@ -438,39 +444,40 @@ OpenIDConnect.prototype.auth = function() {
 	        		req.session.scopes = {};
 	        		var promises = [];
 	        		req.model.consent.findOne({user: req.session.user, client: req.session.client_id}, function(err, consent) {
-	        			reqsco.forEach(function(scope) {
-	        				var innerDef = Q.defer();
-	        				if(!self.settings.scopes[scope]) {
-	        					throw {type: 'error', uri: params.redirect_uri, error: 'invalid_scope', msg: 'Scope '+scope+' not supported.'};
-	        				}
-	        				if(!consent) {
-	        					req.session.scopes[scope] = {ismember: false, explain: self.settings.scopes[scope]};
-	        					innerDef.resolve(true);
-	        				} else {
-	        					var inScope = consent.scopes.indexOf(scope) !== -1;
-	        					req.session.scopes[scope] = {ismember: inScope, explain: self.settings.scopes[scope]};
-	        					innerDef.resolve(!inScope);
-	        				}
-	        				promises.push(innerDef.promise);
-	        			});
-
-		        		Q.allSettled(promises).then(function(results){
-		        			var redirect = false;
-		        			for(var i = 0; i<results.length; i++) {
-		        				if(results[i].value) {
-		        					redirect = true;
-		        					break;
+		        			reqsco.forEach(function(scope) {
+		        				var innerDef = Q.defer();
+		        				if(!self.settings.scopes[scope]) {
+		        					innerDef.reject({type: 'error', uri: params.redirect_uri, error: 'invalid_scope', msg: 'Scope '+scope+' not supported.'});
 		        				}
-		        			}
-		        			if(redirect) {
-		        				req.session.client_key = params.client_id;
-		        				var q = req.path+'?'+querystring.stringify(params);
-		        				deferred.reject({type: 'redirect', uri: self.settings.consent_url+'?'+querystring.stringify({return_url: q})});
-		        			} else {
-		        				deferred.resolve(params);
-		        			}
-		        		});
+		        				if(!consent) {
+		        					req.session.scopes[scope] = {ismember: false, explain: self.settings.scopes[scope]};
+		        					innerDef.resolve(true);
+		        				} else {
+		        					var inScope = consent.scopes.indexOf(scope) !== -1;
+		        					req.session.scopes[scope] = {ismember: inScope, explain: self.settings.scopes[scope]};
+		        					innerDef.resolve(!inScope);
+		        				}
+		        				promises.push(innerDef.promise);
+		        			});
+	
+			        		Q.all(promises).then(function(results){
+			        			var redirect = false;
+			        			for(var i = 0; i<results.length; i++) {
+			        				if(results[i].value) {
+			        					redirect = true;
+			        					break;
+			        				}
+			        			}
+			        			if(redirect) {
+			        				req.session.client_key = params.client_id;
+			        				var q = req.path+'?'+querystring.stringify(params);
+			        				deferred.reject({type: 'redirect', uri: self.settings.consent_url+'?'+querystring.stringify({return_url: q})});
+			        			} else {
+			        				deferred.resolve(params);
+			        			}
+			        		});
 	        		});
+	        		
 	        		return deferred.promise;
 	        	}).then(function(params){
 	        		//Step 5: create responses
@@ -576,7 +583,7 @@ OpenIDConnect.prototype.auth = function() {
 	        				}
 	        			});
 
-	        			Q.allSettled(promises).then(function(results) {
+	        			Q.all(promises).then(function(results) {
 	        				var resp = {};
 	        				for(var i in results) {
 	        					resp = extend(resp, results[i].value||{});
@@ -631,7 +638,7 @@ OpenIDConnect.prototype.auth = function() {
  */
 OpenIDConnect.prototype.consent = function() {
 	var self = this;
-	return [self.use({policies: 'loggedIn', models: 'consent'}),
+	return [self.use('consent'),
 	function(req, res, next) {
 		var accept = req.param('accept');
 		var return_url = req.param('return_url');
@@ -681,10 +688,7 @@ OpenIDConnect.prototype.token = function() {
 			self.endpointParams(spec, req, res, next)
 		},
 	        
-	    self.use({
-			policies:'loggedIn',
-			models: ['client', 'consent', 'auth', 'access', 'refresh']
-		}),
+	    self.use(['client', 'consent', 'auth', 'access', 'refresh']),
 	        
 	    function(req, res, next) {
 			var params = req.parsedParams;
@@ -740,7 +744,7 @@ OpenIDConnect.prototype.token = function() {
 									deferred.reject({type: 'error', error: 'invalid_grant', msg: 'Authorization code already used.'});
 								} else {
 									//obj.auth = a;
-									deferred.resolve({auth: auth, scope: auth.scope, client: client});
+									deferred.resolve({auth: auth, scope: auth.scope, client: client, user: auth.user});
 								}
 							} else {
 								deferred.reject({type: 'error', error: 'invalid_grant', msg: 'Authorization code is invalid.'});
@@ -772,7 +776,9 @@ OpenIDConnect.prototype.token = function() {
 						req.model.refresh.findOne({token: params.refresh_token}, function(err, refresh) {
 							if(!err && refresh) {
 								req.model.auth.findOne({id: refresh.auth})
-								.populate(['access', 'refresh', 'client'])
+								.populate('access')
+								.populate('refresh')
+								.populate('client')
 								.exec(function(err, auth) {
 									if(refresh.status != 'created') {
 										auth.access.forEach(function(access){
@@ -786,7 +792,7 @@ OpenIDConnect.prototype.token = function() {
 									} else {
 										refresh.status = 'used';
 										refresh.save();
-										deferred.resolve({auth: auth, client: client});
+										deferred.resolve({auth: auth, client: client, user: auth.user});
 									}
 								});
 							} else {
@@ -858,7 +864,8 @@ OpenIDConnect.prototype.token = function() {
 								refresh.destroy();
 								if(refresh.auth) {
 									req.model.auth.findOne({id: refresh.auth})
-									.populate(['access', 'refresh'])
+									.populate('access')
+									.populate('refresh')
 									.exec(function(err, auth) {
 										if(!auth.access.length && !auth.refresh.length) {
 											auth.destroy();
@@ -870,7 +877,7 @@ OpenIDConnect.prototype.token = function() {
 							var d = Math.round(new Date().getTime()/1000);
 							var id_token = {
 									iss: req.protocol+'://'+req.headers.host,
-									sub: req.session.user,
+									sub: prev.user||null,
 									aud: prev.client.key,
 									exp: d+3600,
 									iat: d
@@ -879,7 +886,7 @@ OpenIDConnect.prototype.token = function() {
 									token: access,
 									type: 'Bearer',
 									expiresIn: 3600,
-									user: req.session.user,
+									user: prev.user||null,
 									client: prev.client.id,
 									idToken: jwt.encode(id_token, prev.client.secret),
 									scope: prev.scope,
@@ -896,7 +903,8 @@ OpenIDConnect.prototype.token = function() {
 										access.destroy();
 										if(access.auth) {
 											req.model.auth.findOne({id: refresh.auth})
-											.populate(['access', 'refresh'])
+											.populate('access')
+											.populate('refresh')
 											.exec(function(err, auth) {
 												if(!auth.access.length && !auth.refresh.length) {
 													auth.destroy();
@@ -962,10 +970,7 @@ OpenIDConnect.prototype.check = function() {
 		function(req, res, next) {
 			self.endpointParams(spec, req, res, next);
 		},
-	    self.use({
-			policies:'loggedIn',
-			models: ['access', 'auth']
-		}),
+	    self.use(['access', 'auth']),
 		function(req, res, next) {
 			var params = req.parsedParams;//self.parseParams(req, res, spec);
 			if(!scopes.length) {

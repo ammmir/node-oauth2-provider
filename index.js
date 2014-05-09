@@ -164,7 +164,6 @@ var defaults = {
 				access: {
 					identity: 'access',
 					connection: 'def',
-					policies: 'loggedIn',
 					attributes: {
 						token: {type: 'string', required: true},
 						type: {type: 'string', required: true},
@@ -179,7 +178,6 @@ var defaults = {
 				refresh: {
 					identity: 'refresh',
 					connection: 'def',
-					policies: 'loggedIn',
 					attributes: {
 						token: {type: 'string', required: true},
 						scope: {type: 'array', required: true},

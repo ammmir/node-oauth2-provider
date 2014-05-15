@@ -141,7 +141,7 @@ app.get('/user/create', function(req, res, next) {
 });
 
 //process user creation
-app.post('/user/create', oidc.use('user'), function(req, res, next) {
+app.post('/user/create', oidc.use({policies: {loggedIn: false}, models: 'user'}), function(req, res, next) {
   delete req.session.error;
   req.model.user.findOne({email: req.body.email}, function(err, user) {
 	  if(err) {
@@ -190,7 +190,7 @@ app.get('/user/or', oidc.check(/bar|foo/), function(req, res, next){
 });
 
 //Client register form
-app.get('/client/register', oidc.check(), oidc.use('client'), function(req, res, next) {
+app.get('/client/register', oidc.use('client'), function(req, res, next) {
   
   var mkId = function() {
 	var key = crypto.createHash('md5').update(req.session.user+'-'+Math.random()).digest('hex');
@@ -237,7 +237,7 @@ app.get('/client/register', oidc.check(), oidc.use('client'), function(req, res,
 });
 
 //process client register
-app.post('/client/register', oidc.check(), oidc.use('client'), function(req, res, next) {
+app.post('/client/register', oidc.use('client'), function(req, res, next) {
 	delete req.session.error;
   req.body.key = req.session.register_client.key;
   req.body.secret = req.session.register_client.secret;
@@ -252,7 +252,7 @@ app.post('/client/register', oidc.check(), oidc.use('client'), function(req, res
   });
 });
 
-app.get('/client', oidc.check(), oidc.use('client'), function(req, res, next){
+app.get('/client', oidc.use('client'), function(req, res, next){
   var head ='<h1>Clients Page</h1><div><a href="/client/register"/>Register new client</a></div>';
   req.model.client.find({user: req.session.user}, function(err, clients){
 	 var body = ["<ul>"];
@@ -265,7 +265,7 @@ app.get('/client', oidc.check(), oidc.use('client'), function(req, res, next){
   
 });
 
-app.get('/client/:id', oidc.check(), oidc.use('client'), function(req, res, next){
+app.get('/client/:id', oidc.use('client'), function(req, res, next){
   req.model.client.findOne({user: req.session.user, id: req.params.id}, function(err, client){
 	  if(err) {
 		  next(err);
@@ -288,7 +288,7 @@ app.get('/test/clear', function(req, res, next){
 	res.redirect('/test');
 });
 
-app.get('/test', oidc.use('client'), function(req, res, next) {
+app.get('/test', oidc.use({policies: {loggedIn: false}, models: 'client'}), function(req, res, next) {
 	var html='<h1>Test Auth Flows</h1>';
 	var resOps = {
 			"/user/foo": "Restricted by foo scope",

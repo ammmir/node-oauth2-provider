@@ -686,7 +686,7 @@ OpenIDConnect.prototype.token = function() {
 			self.endpointParams(spec, req, res, next)
 		},
 	        
-	    self.use(['client', 'consent', 'auth', 'access', 'refresh']),
+	    self.use({policies: {loggedIn: false}, models:['client', 'consent', 'auth', 'access', 'refresh']}),
 	        
 	    function(req, res, next) {
 			var params = req.parsedParams;

@@ -1,7 +1,7 @@
 /**
  * index.js
  * OpenIDConnect provider
- * Based on OAuth 2.0 provider by Amir Malik 
+ * Based on OAuth 2.0 provider by Amir Malik
  *
  * @author Agustín Moyano
  */
@@ -26,11 +26,11 @@ var defaults = {
 		login_url: '/login',
 		consent_url: '/consent',
 		scopes: {
-			openid: 'Informs the Authorization Server that the Client is making an OpenID Connect request.', 
-			profile:'Access to the End-User\'s default profile Claims.', 
-			email: 'Access to the email and email_verified Claims.', 
-			address: 'Access to the address Claim.', 
-			phone: 'Access to the phone_number and phone_number_verified Claims.', 
+			openid: 'Informs the Authorization Server that the Client is making an OpenID Connect request.',
+			profile:'Access to the End-User\'s default profile Claims.',
+			email: 'Access to the email and email_verified Claims.',
+			address: 'Access to the address Claim.',
+			phone: 'Access to the phone_number and phone_number_verified Claims.',
 			offline_access: 'Grants access to the End-User\'s UserInfo Endpoint even when the End-User is not present (not logged in).'
 		},
 		policies:{
@@ -72,7 +72,7 @@ var defaults = {
 						samePassword: function(clearText) {
 							var sha256 = crypto.createHash('sha256');
 							sha256.update(clearText);
-							return this.password == sha256.digest('hex'); 
+							return this.password == sha256.digest('hex');
 						}
 					},
 					beforeCreate: function(values, next) {
@@ -215,25 +215,25 @@ function OpenIDConnect(options) {
 	this.settings = extend(true, {}, defaults, options);
 	//var rm = require('redis-modelize');
 	for(var i in this.settings.policies) {
-		this.settings.policies[i] = this.settings.policies[i].bind(this); 
+		this.settings.policies[i] = this.settings.policies[i].bind(this);
 	}
-	
+
 	if(this.settings.alien) {
 		for(var i in alien) {
 			if(this.settings.models[i]) delete this.settings.models[i];
 		}
 	}
-	
+
 	if(this.settings.orm) {
 		this.orm = this.settings.orm;
 		for(var i in this.settings.policies) {
-			this.orm.setPolicy(true, i, this.settings.policies[i]); 
+			this.orm.setPolicy(true, i, this.settings.policies[i]);
 		}
 	} else {
-		
+
 		this.orm = new modelling({
-			models: this.settings.models, 
-			adapters: this.settings.adapters, 
+			models: this.settings.models,
+			adapters: this.settings.adapters,
 			connections: this.settings.connections,
 			app: this.settings.app,
 			policies: this.settings.policies
@@ -265,7 +265,7 @@ OpenIDConnect.prototype.use = function(name) {
 			if(util.isArray(m||name)) {
 				(m||name).forEach(function(model) {
 					if(self.settings.alien[model]) {
-						alien[model] = self.settings.alien[model]; 
+						alien[model] = self.settings.alien[model];
 					}
 				});
 			} else if(self.settings.alien[m||name]) {
@@ -369,32 +369,32 @@ OpenIDConnect.prototype.parseParams = function(req, res, spec) {
 
 /**
  * auth
- * 
+ *
  * returns a function to be placed as middleware in connect/express routing methods. For example:
- * 
+ *
  * app.get('/authorization', oidc.auth());
- * 
+ *
  * This is the authorization endpoint, as described in http://tools.ietf.org/html/rfc6749#section-3.1
- * 
+ *
  */
 OpenIDConnect.prototype.auth = function() {
 	var self = this;
 	var spec = {
-			response_type: true, 
-			client_id: true, 
-			scope: true, 
-			redirect_uri: true, 
-			state: false, 
+			response_type: true,
+			client_id: true,
+			scope: true,
+			redirect_uri: true,
+			state: false,
 			nonce: function(params){
 				return params.response_type.indexOf('id_token')!==-1;
-			}, 
-			display: false, 
-			prompt: false, 
-			max_age: false, 
-			ui_locales: false, 
-			claims_locales: false, 
-			id_token_hint: false, 
-			login_hint: false, 
+			},
+			display: false,
+			prompt: false,
+			max_age: false,
+			ui_locales: false,
+			claims_locales: false,
+			id_token_hint: false,
+			login_hint: false,
 			acr_values: false,
 			response_mode: false
 	};
@@ -432,7 +432,7 @@ OpenIDConnect.prototype.auth = function() {
 	        				deferred.resolve(params);
 	        			}
 	        		});
-	        		
+
 	        		return deferred.promise;
 	        	}).then(function(params){
 	        		//Step 3: Check if scopes are valid, and if consent was given.
@@ -457,8 +457,8 @@ OpenIDConnect.prototype.auth = function() {
 		        				}
 		        				promises.push(innerDef.promise);
 		        			});
-	
-			        		Q.all(promises).then(function(results){
+
+			        		Q.allSettled(promises).then(function(results){
 			        			var redirect = false;
 			        			for(var i = 0; i<results.length; i++) {
 			        				if(results[i].value) {
@@ -475,13 +475,13 @@ OpenIDConnect.prototype.auth = function() {
 			        			}
 			        		});
 	        		});
-	        		
+
 	        		return deferred.promise;
 	        	}).then(function(params){
 	        		//Step 5: create responses
 	        		if(params.response_type == 'none') {
 	        			return {params: params, resp: {}};
-	        		} else {	
+	        		} else {
 	        			var deferred = Q.defer();
 	        			var promises = [];
 
@@ -514,7 +514,7 @@ OpenIDConnect.prototype.auth = function() {
 		        					}).exec(function(err, auth) {
 		        						if(!err && auth) {
 			        						setTimeout(function() {
-				        						req.model.auth.findOne({code: token}, function(err, auth) { 
+				        						req.model.auth.findOne({code: token}, function(err, auth) {
 				        							if(auth && auth.status == 'created') {
 				        								auth.destroy();
 				        							}
@@ -525,7 +525,7 @@ OpenIDConnect.prototype.auth = function() {
 		        							def.reject(err||'Could not create auth');
 		        						}
 		        					});
-		        					
+
 		        				};
 		        				createToken();
 		        				break;
@@ -566,8 +566,8 @@ OpenIDConnect.prototype.auth = function() {
 		        						if(!err && access) {
 		        							setTimeout(function() {
 		        								access.destroy();
-		        							}, 1000*3600); //1 hour		
-	
+		        							}, 1000*3600); //1 hour
+
 		        							def.resolve({
 		        								access_token: obj.token,
 		        								token_type: obj.type,
@@ -581,7 +581,7 @@ OpenIDConnect.prototype.auth = function() {
 	        				}
 	        			});
 
-	        			Q.all(promises).then(function(results) {
+	        			Q.allSettled(promises).then(function(results) {
 	        				var resp = {};
 	        				for(var i in results) {
 	        					resp = extend(resp, results[i].value||{});
@@ -619,20 +619,20 @@ OpenIDConnect.prototype.auth = function() {
 	        		} else {
 	        			res.redirect(error.uri);
 	        		}
-	        	}); 
+	        	});
 	        }
 	        ];
 };
 
 /**
  * consent
- * 
+ *
  * returns a function to be placed as middleware in connect/express routing methods. For example:
- * 
+ *
  * app.post('/consent', oidc.consent());
- * 
+ *
  * This method saves the consent of the resource owner to a client request, or returns an access_denied error.
- * 
+ *
  */
 OpenIDConnect.prototype.consent = function() {
 	var self = this;
@@ -662,19 +662,19 @@ OpenIDConnect.prototype.consent = function() {
 
 /**
  * token
- * 
+ *
  * returns a function to be placed as middleware in connect/express routing methods. For example:
- * 
+ *
  * app.get('/token', oidc.token());
- * 
+ *
  * This is the token endpoint, as described in http://tools.ietf.org/html/rfc6749#section-3.2
- * 
+ *
  */
 OpenIDConnect.prototype.token = function() {
 	var self = this;
 	var spec = {
-			grant_type: true, 
-			code: false, 
+			grant_type: true,
+			code: false,
 			redirect_uri: false,
 			refresh_token: false,
 			scope: false
@@ -685,15 +685,15 @@ OpenIDConnect.prototype.token = function() {
 	    function(req, res, next) {
 			self.endpointParams(spec, req, res, next)
 		},
-	        
+
 	    self.use({policies: {loggedIn: false}, models:['client', 'consent', 'auth', 'access', 'refresh']}),
-	        
+
 	    function(req, res, next) {
 			var params = req.parsedParams;
-	
+
 			var client_key = req.body.client_id;
 			var client_secret = req.body.client_secret;
-	
+
 			if(!client_key || !client_secret) {
 				var authorization = parse_authorization(req.headers.authorization);
 				if(authorization) {
@@ -704,7 +704,7 @@ OpenIDConnect.prototype.token = function() {
 			if(!client_key || !client_secret) {
 				self.errorHandle(res, params.redirect_uri, 'invalid_client', 'No client credentials found.');
 			} else {
-	
+
 				Q.fcall(function() {
 					//Step 2: check if client and secret are valid
 					var deferred = Q.defer();
@@ -718,9 +718,9 @@ OpenIDConnect.prototype.token = function() {
 					return deferred.promise;
 				})
 				.then(function(client) {
-	
+
 					var deferred = Q.defer();
-	
+
 					switch(params.grant_type) {
 					//Client is trying to exchange an authorization code for an access token
 					case "authorization_code":
@@ -748,28 +748,28 @@ OpenIDConnect.prototype.token = function() {
 								deferred.reject({type: 'error', error: 'invalid_grant', msg: 'Authorization code is invalid.'});
 							}
 						});
-	
+
 						//Extra checks, required if grant_type is 'authorization_code'
 						return deferred.promise.then(function(obj){
 							//Step 4: check if grant_type is valid
-	
+
 							if(obj.auth.responseType != 'code') {
 								throw {type: 'error', error: 'unauthorized_client', msg: 'Client cannot use this grant type.'};
 							}
-	
+
 							//Step 5: check if redirect_uri is valid
 							if((obj.auth.redirectUri || params.redirect_uri) && obj.auth.redirectUri != params.redirect_uri) {
 								throw {type: 'error', error: 'invalid_grant', msg: 'Redirection URI does not match.'};
 							}
-	
+
 							return obj;
 						});
-	
+
 						break;
-	
+
 						//Client is trying to exchange a refresh token for an access token
 					case "refresh_token":
-	
+
 						//Step 3: check if refresh token is valid and not used previously
 						req.model.refresh.findOne({token: params.refresh_token}, function(err, refresh) {
 							if(!err && refresh) {
@@ -807,11 +807,11 @@ OpenIDConnect.prototype.token = function() {
 										}
 									});
 									obj.scope = params.scope;
-								} 
+								}
 							} else {
 								obj.scope = obj.auth.scope;
 							}
-							
+
 							return obj;
 						});
 						break;
@@ -824,22 +824,22 @@ OpenIDConnect.prototype.token = function() {
 						return deferred.promise;
 						break;
 					}
-	
+
 				})
 				.then(function(obj) {
 					//Check if code was issued for client
 					if(params.grant_type != 'client_credentials' && obj.auth.client.key != client_key) {
 						throw {type: 'error', error: 'invalid_grant', msg: 'The code was not issued for this client.'};
 					}
-	
+
 					return obj;
-	
+
 				})
 				.then(function(prev){
 					//Create access token
 					/*var scopes = obj.scope;
 					var auth = obj.auth;*/
-	
+
 					var createToken = function(model, cb) {
 						var token = crypto.createHash('md5').update(Math.random()+'').digest('hex');
 						model.findOne({token: token}, function(err, response) {
@@ -856,7 +856,7 @@ OpenIDConnect.prototype.token = function() {
 							scope: prev.scope,
 							status: 'created',
 							auth: prev.auth?prev.auth.id:null
-						}, 
+						},
 						function(err, refresh) {
 							setTimeout(function() {
 								refresh.destroy();
@@ -871,7 +871,7 @@ OpenIDConnect.prototype.token = function() {
 									});
 								}
 							}, 1000*3600*5); //5 hours
-	
+
 							var d = Math.round(new Date().getTime()/1000);
 							var id_token = {
 									iss: req.protocol+'://'+req.headers.host,
@@ -889,14 +889,14 @@ OpenIDConnect.prototype.token = function() {
 									idToken: jwt.encode(id_token, prev.client.secret),
 									scope: prev.scope,
 									auth: prev.auth?prev.auth.id:null
-							}, 
+							},
 							function(err, access) {
 								if(!err && access) {
 									if(prev.auth) {
 										prev.auth.status = 'used'
 										prev.auth.save();
 									}
-	
+
 									setTimeout(function() {
 										access.destroy();
 										if(access.auth) {
@@ -909,8 +909,8 @@ OpenIDConnect.prototype.token = function() {
 												}
 											});
 										}
-									}, 1000*3600); //1 hour		
-	
+									}, 1000*3600); //1 hour
+
 									res.json({
 										access_token: access.token,
 										token_type: access.type,
@@ -920,7 +920,7 @@ OpenIDConnect.prototype.token = function() {
 									});
 								}
 							});
-						}); 
+						});
 					};
 					createToken(req.model.access, function(access) {
 						createToken(req.model.refresh, function(refresh){
@@ -934,23 +934,23 @@ OpenIDConnect.prototype.token = function() {
 					} else {
 						res.redirect(error.uri);
 					}
-				}); 
+				});
 			}
 	}];
 };
 
 
-/** 
+/**
  * check
- * 
+ *
  * returns a function to be placed as middleware in connect/express routing methods. For example:
- * 
+ *
  * app.get('/api/user', oidc.check('openid', /profile|email/), function(req, res, next) { ... });
- * 
+ *
  * If no arguments are given, checks if user is logged in.
- * 
+ *
  * The other arguments may be of type string or regexp.
- * 
+ *
  * This function is used to check if user logged in, if an access_token is present, and if certain scopes where granted to it.
  */
 OpenIDConnect.prototype.check = function() {
@@ -1012,7 +1012,7 @@ OpenIDConnect.prototype.check = function() {
 								}
 							} else {
 								//Delete access token, and every thing related to it.
-								
+
 								req.model.auth.findOne({id: access.auth})
 								.populate('accessTokens')
 								.populate('refreshTokens')
@@ -1026,7 +1026,7 @@ OpenIDConnect.prototype.check = function() {
 									});
 									auth.destroy();
 								});
-								
+
 								self.errorHandle(res, null, 'invalid_grant', 'Access token issued for an other user.');
 							}
 						} else {
@@ -1041,13 +1041,13 @@ OpenIDConnect.prototype.check = function() {
 	];
 };
 
-/** 
+/**
  * userInfo
- * 
+ *
  * returns a function to be placed as middleware in connect/express routing methods. For example:
- * 
+ *
  * app.get('/api/user', oidc.userInfo());
- * 
+ *
  * This function returns the user info in a json object. Checks for scope and login are included.
  */
 OpenIDConnect.prototype.userInfo = function() {

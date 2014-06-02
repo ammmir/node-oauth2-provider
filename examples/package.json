@@ -1,14 +1,19 @@
 {
   "name": "openid-connect-example",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "scripts": {
     "start": "node openid-connect-example.js"
   },
   "dependencies": {
-    "express": "*",
+    "express": "~4.0",
     "express-session": "*",
     "connect-redis": "*",
-    "extend": "*"
+    "extend": "*",
+    "morgan": "*",
+    "body-parser": "*",
+    "method-override": "*",
+    "cookie-parser": "*",
+    "errorhandler": "*"
   }
 }

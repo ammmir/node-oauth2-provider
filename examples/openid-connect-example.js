@@ -58,7 +58,7 @@ app.get('/my/login', function(req, res, next) {
 });
 
 //process login
-app.post('/my/login', oidc.use('user'), function(req, res, next) {
+app.post('/my/login', oidc.use({policies: {loggedIn: false}, models: 'user'}), function(req, res, next) {
   delete req.session.error;
   req.model.user.findOne({email: req.body.email}, function(err, user) {
       if(!err && user && user.samePassword(req.body.password)) {
@@ -259,7 +259,6 @@ app.get('/client', oidc.use('client'), function(req, res, next){
      body.push('</ul>');
      res.send(head+body.join(''));
   });
-
 });
 
 app.get('/client/:id', oidc.use('client'), function(req, res, next){
@@ -272,7 +271,6 @@ app.get('/client/:id', oidc.use('client'), function(req, res, next){
              html += '<li>'+uri+'</li>';
           });
           html+='</ul></li></ul>';
-
           res.send(html);
       } else {
           res.send('<h1>No Client Fount!</h1><div><a href="/client">Go back</a></div>');
@@ -443,7 +441,6 @@ app.get('/test', oidc.use({policies: {loggedIn: false}, models: 'client'}), func
         test = {status: 'new'};
         res.redirect(req.query.page+'?access_token='+req.query.access_token);
     }
-
 });
 
 

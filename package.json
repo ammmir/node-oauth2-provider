@@ -1,20 +1,39 @@
 {
-  "name": "oauth2-provider",
-  "version": "1.3.0",
-  "description": "A simple customizable OAuth 2.0 provider (server) for node.js.",
-  "homepage": "https://github.com/ammmir/node-oauth2-provider",
+  "name": "openid-connect",
+  "version": "1.0.6",
+  "keywords": [
+    "oauth",
+    "oauth2",
+    "oauth2 server",
+    "oauth2 provider",
+    "openid server",
+    "identity provider",
+    "server",
+    "openid",
+    "connect",
+    "openid connect"
+  ],
+  "description": "This is an fully functional OAuth 2 server implementation, with support for OpenID Connect specification. Based on https://github.com/ammmir/node-oauth2-provider.",
+  "homepage": "https://github.com/agmoyano/OpenIDConnect",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/agmoyano/OpenIDConnect.git"
+  },
   "author": {
-    "name": "Amir Malik",
-    "url": "http://amirmalik.net/"
+    "name": "Agustín Moyano"
   },
   "main": "index",
   "dependencies": {
-    "serializer": ">=0.0.2 <0.1.0"
+    "extend": "1.1.3",
+    "sails-redis": "balderdashy/sails-redis",
+    "modelling": "*",
+    "q": "0.9.6",
+    "jwt-simple": "0.1.0",
+    "lodash": "*",
+    "base64url": "*"
   },
-  "devDependencies": {
-    "mocha" : "1.0.3"
-    ,"sinon" : "1.3.4"
-    ,"chai" : "1.0.3"
+  "directories": {
+    "example": "./examples"
   },
   "licenses": [
     {

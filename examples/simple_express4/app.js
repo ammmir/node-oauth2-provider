@@ -1,8 +1,12 @@
 // simple server with a protected resource at /secret secured by OAuth 2
 
-var OAuth2Provider = require('../index').OAuth2Provider,
+var OAuth2Provider = require('../../index').OAuth2Provider,
            express = require('express'),
-       MemoryStore = express.session.MemoryStore;
+           session = require('express-session'),
+       MemoryStore = require('express-session').MemoryStore,
+        bodyParser = require('body-parser'),
+      cookieParser = require('cookie-parser'),
+            logger = require('morgan');
 
 // hardcoded list of <client id, client secret> tuples
 var myClients = {
@@ -100,11 +104,11 @@ myOAP.on('client_auth', function(client_id, client_secret, username, password, n
   return next(new Error('client authentication denied'));
 });
 
-app.use(express.logger('dev'));
-app.use(express.bodyParser());
+app.use(logger('dev'));
+app.use(bodyParser.urlencoded({extended: true}));
 app.use(express.query());
-app.use(express.cookieParser());
-app.use(express.session({store: new MemoryStore({reapInterval: 5 * 60 * 1000}), secret: 'abracadabra'}));
+app.use(cookieParser());
+app.use(session({store: new MemoryStore({reapInterval: 5 * 60 * 1000}), secret: 'abracadabra', resave: true, saveUninitialized: true}));
 app.use(myOAP.oauth());
 app.use(myOAP.login());
 

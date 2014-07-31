@@ -1,6 +1,6 @@
 // simple server with a protected resource at /secret secured by OAuth 2
 
-var OAuth2Provider = require('../index').OAuth2Provider,
+var OAuth2Provider = require('../../index').OAuth2Provider,
            express = require('express'),
        MemoryStore = express.session.MemoryStore;
 

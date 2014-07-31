@@ -39,13 +39,13 @@ care about which type of authentication was used.
 
 To support client authentication (sometimes known as xAuth) for trusted
 clients, handle the `client_auth` event to exchange a username and password
-for an access token. See `examples/simple_express3.js`.
+for an access token. See `examples/simple_express4/app.js`.
 
 ## Example
 
-In the root directory, run `npm install express` and then run:
+Within the examples sub-folder matching your preferred version of Express (for example, `examples/simple_express4`), run `npm install` and then run:
 
-    node examples/simple_express3.js
+    node app.js
 
 Visit <http://localhost:8081/login> to gain access to
 <http://localhost:8081/secret> or use OAuth to obtain an access token as a code (default) or a token (in the URL hash):
@@ -56,7 +56,7 @@ Visit <http://localhost:8081/login> to gain access to
 ## Running tests
 
   Install dev dependencies:
-  
+
     $ npm install -d
 
   Run the tests:

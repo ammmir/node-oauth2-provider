@@ -183,10 +183,13 @@ OAuth2Provider.prototype.oauth = function() {
         } else {
           var code = serializer.randomString(128);
 
-          self.emit('save_grant', req, client_id, code, function() {
-            var extras = {
-              code: code,
-            };
+          self.emit('save_grant', req, client_id, code, function(err, extras) {
+            if(err) {
+              res.writeHead(500);
+              return res.end(err.message);
+            }
+
+            extras = extras || { code: code };
 
             // pass back anti-CSRF opaque value
             if(state)

@@ -87,6 +87,8 @@ OAuth2Provider.prototype.login = function() {
 
     if(req.query['access_token']) {
       atok = req.query['access_token'];
+    } else if(req.body['access_token']) {
+      atok = req.body['access_token'];
     } else if((req.headers['authorization'] || '').indexOf('Bearer ') == 0) {
       atok = req.headers['authorization'].replace('Bearer', '').trim();
     } else {

@@ -68,10 +68,12 @@ myOAP.on('lookup_grant', function(client_id, client_secret, code, next) {
 
 // embed an opaque value in the generated access token
 myOAP.on('create_access_token', function(user_id, client_id, next) {
-  var extra_data = 'blah'; // can be any data type or null
-  //var oauth_params = {token_type: 'bearer'};
+  var extra_data = {id: 1}; // can be any data type or null
+  var oauth_params = {
+    client_secret: 'abc'
+  };
 
-  next(extra_data/*, oauth_params*/);
+  next(extra_data, oauth_params);
 });
 
 // (optional) do something with the generated access token

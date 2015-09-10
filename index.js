@@ -6,44 +6,28 @@
  */
 
 var EventEmitter = require('events').EventEmitter,
-     querystring = require('querystring'),
-      serializer = require('serializer');
+    jwt = require('jwt-simple'),
+    querystring = require('querystring'),
+    serializer = require('serializer'),
+    _ = require('underscore');
 
-_extend = function(dst,src) {
-
-  var srcs = [];
-  if ( typeof(src) == 'object' ) {
-    srcs.push(src);
-  } else if ( typeof(src) == 'array' ) {
-    for (var i = src.length - 1; i >= 0; i--) {
-      srcs.push(this._extend({},src[i]))
-    };
-  } else {
-    throw new Error("Invalid argument")
-  }
-
-  for (var i = srcs.length - 1; i >= 0; i--) {
-    for (var key in srcs[i]) {
-      dst[key] = srcs[i][key];
-    }
-  };
-
-  return dst;
-}
 function parse_authorization(authorization) {
-  if(!authorization)
+  if (!authorization) {
     return null;
+  }
 
   var parts = authorization.split(' ');
 
-  if(parts.length != 2 || parts[0] != 'Basic')
+  if (parts.length != 2 || parts[0] != 'Basic') {
     return null;
+  }
 
   var creds = new Buffer(parts[1], 'base64').toString(),
           i = creds.indexOf(':');
 
-  if(i == -1)
+  if (i == -1) {
     return null;
+  }
 
   var username = creds.slice(0, i);
       password = creds.slice(i + 1);
@@ -52,7 +36,7 @@ function parse_authorization(authorization) {
 }
 
 function OAuth2Provider(options) {
-  if(arguments.length != 1) {
+  if (arguments.length != 1) {
     console.warn('OAuth2Provider(crypt_key, sign_key) constructor has been deprecated, yo.');
 
     options = {
@@ -71,10 +55,24 @@ function OAuth2Provider(options) {
 OAuth2Provider.prototype = new EventEmitter();
 
 OAuth2Provider.prototype.generateAccessToken = function(user_id, client_id, extra_data, token_options) {
-  token_options = token_options || {}
-  var out = _extend(token_options, {
-    access_token: this.serializer.stringify([user_id, client_id, +new Date, extra_data]),
-    refresh_token: null,
+  token_options = token_options || {};
+
+  var access_token, refresh_token;
+  if (token_options.client_secret) {
+    var client_secret = token_options.client_secret;
+    // Unset client_secret as it's redundant in payload.
+    delete token_options.client_secret;
+
+    access_token = jwt.encode(_.extend(extra_data, {date: new Date(), token_type: 'access_token'}), client_secret);
+    refresh_token = jwt.encode(_.extend(extra_data, {date: new Date(), token_type: 'refresh_token'}), client_secret);
+  } else {
+    access_token = this.serializer.stringify([user_id, client_id, +new Date, extra_data]);
+    refresh_token = this.serializer.stringify([user_id, client_id, +new Date, extra_data], 'refresh');
+  }
+
+  var out = _.extend(token_options, {
+    access_token: access_token,
+    refresh_token: refresh_token,
   });
   return out;
 };
@@ -85,9 +83,9 @@ OAuth2Provider.prototype.login = function() {
   return function(req, res, next) {
     var data, atok, user_id, client_id, grant_date, extra_data;
 
-    if(req.query['access_token']) {
+    if (req.query['access_token']) {
       atok = req.query['access_token'];
-    } else if((req.headers['authorization'] || '').indexOf('Bearer ') == 0) {
+    } else if ((req.headers['authorization'] || '').indexOf('Bearer ') == 0) {
       atok = req.headers['authorization'].replace('Bearer', '').trim();
     } else {
       return next();
@@ -99,7 +97,7 @@ OAuth2Provider.prototype.login = function() {
       client_id = data[1];
       grant_date = new Date(data[2]);
       extra_data = data[3];
-    } catch(e) {
+    } catch (e) {
       res.writeHead(400);
       return res.end(e.message);
     }
@@ -119,11 +117,11 @@ OAuth2Provider.prototype.oauth = function() {
   return function(req, res, next) {
     var uri = ~req.url.indexOf('?') ? req.url.substr(0, req.url.indexOf('?')) : req.url;
 
-    if(req.method == 'GET' && self.options.authorize_uri == uri) {
+    if (req.method == 'GET' && self.options.authorize_uri == uri) {
       var    client_id = req.query.client_id,
           redirect_uri = req.query.redirect_uri;
 
-      if(!client_id || !redirect_uri) {
+      if (!client_id || !redirect_uri) {
         res.writeHead(400);
         return res.end('client_id and redirect_uri required');
       }
@@ -139,7 +137,7 @@ OAuth2Provider.prototype.oauth = function() {
         self.emit('authorize_form', req, res, client_id, authorize_url);
       });
 
-    } else if(req.method == 'POST' && self.options.authorize_uri == uri) {
+    } else if (req.method == 'POST' && self.options.authorize_uri == uri) {
       var     client_id = (req.query.client_id || req.body.client_id),
            redirect_uri = (req.query.redirect_uri || req.body.redirect_uri),
           response_type = (req.query.response_type || req.body.response_type) || 'code',
@@ -156,8 +154,8 @@ OAuth2Provider.prototype.oauth = function() {
           return res.end('invalid response_type requested');
       }
 
-      if('allow' in req.body) {
-        if('token' == response_type) {
+      if ('allow' in req.body) {
+        if ('token' == response_type) {
           var user_id;
 
           try {
@@ -169,10 +167,10 @@ OAuth2Provider.prototype.oauth = function() {
             return res.end(e.message);
           }
 
-          self.emit('create_access_token', user_id, client_id, function(extra_data,token_options) {
+          self.emit('create_access_token', user_id, client_id, function(extra_data, token_options) {
             var atok = self.generateAccessToken(user_id, client_id, extra_data, token_options);
 
-            if(self.listeners('save_access_token').length > 0)
+            if (self.listeners('save_access_token').length > 0)
               self.emit('save_access_token', user_id, client_id, atok);
 
             url += querystring.stringify(atok);
@@ -189,8 +187,9 @@ OAuth2Provider.prototype.oauth = function() {
             };
 
             // pass back anti-CSRF opaque value
-            if(state)
+            if (state) {
               extras['state'] = state;
+            }
 
             url += querystring.stringify(extras);
 
@@ -205,16 +204,16 @@ OAuth2Provider.prototype.oauth = function() {
         res.end();
       }
 
-    } else if(req.method == 'POST' && self.options.access_token_uri == uri) {
+    } else if (req.method == 'POST' && self.options.access_token_uri == uri) {
       var     client_id = req.body.client_id,
           client_secret = req.body.client_secret,
            redirect_uri = req.body.redirect_uri,
                    code = req.body.code;
 
-      if(!client_id || !client_secret) {
+      if (!client_id || !client_secret) {
         var authorization = parse_authorization(req.headers.authorization);
 
-        if(!authorization) {
+        if (!authorization) {
           res.writeHead(400);
           return res.end('client_id and client_secret required');
         }
@@ -223,14 +222,14 @@ OAuth2Provider.prototype.oauth = function() {
         client_secret = authorization[1];
       }
 
-      if('password' == req.body.grant_type) {
-        if(self.listeners('client_auth').length == 0) {
+      if ('password' == req.body.grant_type) {
+        if (self.listeners('client_auth').length == 0) {
           res.writeHead(401);
           return res.end('client authentication not supported');
         }
 
         self.emit('client_auth', client_id, client_secret, req.body.username, req.body.password, function(err, user_id) {
-          if(err) {
+          if (err) {
             res.writeHead(401);
             return res.end(err.message);
           }
@@ -243,7 +242,7 @@ OAuth2Provider.prototype.oauth = function() {
         });
       } else {
         self.emit('lookup_grant', client_id, client_secret, code, function(err, user_id) {
-          if(err) {
+          if (err) {
             res.writeHead(400);
             return res.end(err.message);
           }
@@ -270,7 +269,7 @@ OAuth2Provider.prototype._createAccessToken = function(user_id, client_id, cb) {
   this.emit('create_access_token', user_id, client_id, function(extra_data, token_options) {
     var atok = self.generateAccessToken(user_id, client_id, extra_data, token_options);
 
-    if(self.listeners('save_access_token').length > 0)
+    if (self.listeners('save_access_token').length > 0)
       self.emit('save_access_token', user_id, client_id, atok);
 
     return cb(atok);

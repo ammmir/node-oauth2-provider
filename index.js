@@ -63,8 +63,8 @@ OAuth2Provider.prototype.generateAccessToken = function(user_id, client_id, extr
     // Unset client_secret as it's redundant in payload.
     delete token_options.client_secret;
 
-    access_token = jwt.encode(_.extend(extra_data, {date: new Date(), token_type: 'access_token'}), client_secret);
-    refresh_token = jwt.encode(_.extend(extra_data, {date: new Date(), token_type: 'refresh_token'}), client_secret);
+    access_token = jwt.encode(_.extend(extra_data, token_options), client_secret);
+    refresh_token = jwt.encode(_.extend(extra_data, token_options), client_secret);
   } else {
     access_token = this.serializer.stringify([user_id, client_id, +new Date, extra_data]);
     refresh_token = this.serializer.stringify([user_id, client_id, +new Date, extra_data], 'refresh');

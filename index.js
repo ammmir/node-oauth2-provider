@@ -6,6 +6,7 @@
  */
 
 var EventEmitter = require('events').EventEmitter,
+    jwtDecode = require('jwt-decode'),
     jwt = require('jwt-simple'),
     querystring = require('querystring'),
     serializer = require('serializer'),
@@ -80,33 +81,21 @@ OAuth2Provider.prototype.login = function() {
   var self = this;
 
   return function(req, res, next) {
-    var data, atok, user_id, client_id, grant_date, extra_data;
+    var atok, tokenBody;
+    atok = self._getTokenFromReq(req);
 
-    if (req.query['access_token']) {
-      atok = req.query['access_token'];
-    } else if ((req.headers['authorization'] || '').indexOf('Bearer ') == 0) {
-      atok = req.headers['authorization'].replace('Bearer', '').trim();
-    } else {
+    if (!atok) {
       return next();
     }
 
-    try {
-      data = self.serializer.parse(atok);
-      user_id = data[0];
-      client_id = data[1];
-      grant_date = new Date(data[2]);
-      extra_data = data[3];
-    } catch (e) {
-      res.writeHead(400);
-      return res.end(e.message);
+    tokenBody = self._getTokenBody(atok);
+
+    // Check whether token has expired.
+    if (tokenBody.exp && tokenBody.exp < parseInt(moment().unix(), 10)) {
+      return res.status(400).send('Access token invalid or expired');
     }
 
-    self.emit('access_token', req, {
-      user_id: user_id,
-      client_id: client_id,
-      extra_data: extra_data,
-      grant_date: grant_date
-    }, next);
+    self.emit('access_token', req, res, tokenBody, atok, next);
   };
 };
 
@@ -276,7 +265,7 @@ OAuth2Provider.prototype._createAccessToken = function(user_id, client_id, cb) {
 };
 
 // Prep Jwt body object.
-OAuth2Provider.prototype.prepJwtBody = function(iss, sub, aud, exp) {
+OAuth2Provider.prototype.prepTokenBody = function(iss, sub, aud, exp) {
   var body = {
     iss: iss,
     sub: sub,
@@ -286,6 +275,35 @@ OAuth2Provider.prototype.prepJwtBody = function(iss, sub, aud, exp) {
   };
 
   return body;
+};
+
+// Helper function to get the bearer token from the authorization header.
+OAuth2Provider.prototype._getTokenFromReq = function(req) {
+  var pattern = /(Token|Bearer)\s/gi;
+
+  if (!req.headers.authorization && !pattern.test(req.headers.authorization)) {
+    return null;
+  } else {
+    return req.headers.authorization.replace(pattern, '');
+  }
+};
+
+// Helper function for decoding JWT Token.
+OAuth2Provider.prototype.verifyToken = function(token, secret) {
+  try {
+    if (jwt.decode(token, secret)) {
+      return true;
+    }
+    return false;
+  } catch(e) {
+    console.log(e);
+    return false;
+  }
+};
+
+// Helper function for decoding JWT Token.
+OAuth2Provider.prototype._getTokenBody = function(token) {
+  return jwtDecode(token);
 };
 
 exports.OAuth2Provider = OAuth2Provider;

@@ -9,7 +9,8 @@ var EventEmitter = require('events').EventEmitter,
     jwt = require('jwt-simple'),
     querystring = require('querystring'),
     serializer = require('serializer'),
-    _ = require('underscore');
+    _ = require('underscore'),
+    moment = require('moment');
 
 function parse_authorization(authorization) {
   if (!authorization) {
@@ -58,17 +59,15 @@ OAuth2Provider.prototype.generateAccessToken = function(user_id, client_id, extr
   token_options = token_options || {};
 
   var access_token, refresh_token;
+  var client_secret = token_options.client_secret || self.options.crypt_key;
   if (token_options.client_secret) {
-    var client_secret = token_options.client_secret;
     // Unset client_secret as it's redundant in payload.
     delete token_options.client_secret;
-
-    access_token = jwt.encode(_.extend(extra_data, token_options), client_secret);
-    refresh_token = jwt.encode(_.extend(extra_data, token_options), client_secret);
-  } else {
-    access_token = this.serializer.stringify([user_id, client_id, +new Date, extra_data]);
-    refresh_token = this.serializer.stringify([user_id, client_id, +new Date, extra_data], 'refresh');
   }
+
+  // JWT access_token
+  access_token = jwt.encode(_.extend(extra_data, token_options), client_secret);
+  refresh_token = this.serializer.stringify([user_id, client_id, parseInt(moment().unix())]);
 
   var out = _.extend(token_options, {
     access_token: access_token,
@@ -274,6 +273,19 @@ OAuth2Provider.prototype._createAccessToken = function(user_id, client_id, cb) {
 
     return cb(atok);
   });
+};
+
+// Prep Jwt body object.
+OAuth2Provider.prototype.prepJwtBody = function(iss, sub, aud, exp) {
+  var body = {
+    iss: iss,
+    sub: sub,
+    aud: aud,
+    iat: parseInt(moment().unix(), 10),
+    exp: exp.key && exp.value ? parseInt(moment().add(exp.value, exp.key).unix(), 10) : null
+  };
+
+  return body;
 };
 
 exports.OAuth2Provider = OAuth2Provider;

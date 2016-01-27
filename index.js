@@ -20,14 +20,14 @@ function parse_authorization(authorization) {
 
   var parts = authorization.split(' ');
 
-  if (parts.length != 2 || parts[0] != 'Basic') {
+  if (parts.length !== 2 || parts[0] !== 'Basic') {
     return null;
   }
 
   var creds = new Buffer(parts[1], 'base64').toString(),
           i = creds.indexOf(':');
 
-  if (i == -1) {
+  if (i === -1) {
     return null;
   }
 
@@ -38,12 +38,12 @@ function parse_authorization(authorization) {
 }
 
 function OAuth2Provider(options) {
-  if (arguments.length != 1) {
+  if (arguments.length !== 1) {
     console.warn('OAuth2Provider(crypt_key, sign_key) constructor has been deprecated, yo.');
 
     options = {
       crypt_key: arguments[0],
-      sign_key: arguments[1],
+      sign_key: arguments[1]
     };
   }
 
@@ -68,11 +68,11 @@ OAuth2Provider.prototype.generateAccessToken = function(user_id, client_id, extr
 
   // JWT access_token
   access_token = jwt.encode(_.extend(extra_data, token_options), client_secret);
-  refresh_token = this.serializer.stringify([user_id, client_id, parseInt(moment().unix())]);
+  refresh_token = this.serializer.stringify([user_id, client_id, parseInt(moment().unix(), 10)]);
 
   var out = _.extend(token_options, {
     access_token: access_token,
-    refresh_token: refresh_token,
+    refresh_token: refresh_token
   });
   return out;
 };
@@ -105,8 +105,8 @@ OAuth2Provider.prototype.oauth = function() {
   return function(req, res, next) {
     var uri = ~req.url.indexOf('?') ? req.url.substr(0, req.url.indexOf('?')) : req.url;
 
-    if (req.method == 'GET' && self.options.authorize_uri == uri) {
-      var    client_id = req.query.client_id,
+    if (req.method === 'GET' && self.options.authorize_uri === uri) {
+      var client_id = req.query.client_id,
           redirect_uri = req.query.redirect_uri;
 
       if (!client_id || !redirect_uri) {
@@ -125,12 +125,13 @@ OAuth2Provider.prototype.oauth = function() {
         self.emit('authorize_form', req, res, client_id, authorize_url);
       });
 
-    } else if (req.method == 'POST' && self.options.authorize_uri == uri) {
-      var     client_id = (req.query.client_id || req.body.client_id),
-           redirect_uri = (req.query.redirect_uri || req.body.redirect_uri),
-          response_type = (req.query.response_type || req.body.response_type) || 'code',
-                  state = (req.query.state || req.body.state),
-              x_user_id = (req.query.x_user_id || req.body.x_user_id);
+    } else if (req.method === 'POST' && self.options.authorize_uri === uri) {
+      var response_type = (req.query.response_type || req.body.response_type) || 'code',
+          state = (req.query.state || req.body.state),
+          x_user_id = (req.query.x_user_id || req.body.x_user_id);
+
+      redirect_uri = (req.query.redirect_uri || req.body.redirect_uri);
+      client_id = (req.query.client_id || req.body.client_id);
 
       var url = redirect_uri;
 
@@ -143,7 +144,7 @@ OAuth2Provider.prototype.oauth = function() {
       }
 
       if ('allow' in req.body) {
-        if ('token' == response_type) {
+        if ('token' === response_type) {
           var user_id;
 
           try {
@@ -171,7 +172,7 @@ OAuth2Provider.prototype.oauth = function() {
 
           self.emit('save_grant', req, client_id, code, function() {
             var extras = {
-              code: code,
+              code: code
             };
 
             // pass back anti-CSRF opaque value
@@ -191,12 +192,12 @@ OAuth2Provider.prototype.oauth = function() {
         res.writeHead(303, {Location: url});
         res.end();
       }
+    } else if (req.method === 'POST' && self.options.access_token_uri === uri) {
+      var client_secret = req.body.client_secret,
+          code = req.body.code;
 
-    } else if (req.method == 'POST' && self.options.access_token_uri == uri) {
-      var     client_id = req.body.client_id,
-          client_secret = req.body.client_secret,
-           redirect_uri = req.body.redirect_uri,
-                   code = req.body.code;
+      redirect_uri = req.body.redirect_uri;
+      client_id = req.body.client_id;
 
       if (!client_id || !client_secret) {
         var authorization = parse_authorization(req.headers.authorization);
@@ -210,8 +211,8 @@ OAuth2Provider.prototype.oauth = function() {
         client_secret = authorization[1];
       }
 
-      if ('password' == req.body.grant_type) {
-        if (self.listeners('client_auth').length == 0) {
+      if ('password' === req.body.grant_type) {
+        if (self.listeners('client_auth').length === 0) {
           res.writeHead(401);
           return res.end('client authentication not supported');
         }

@@ -70,11 +70,15 @@ OAuth2Provider.prototype.generateAccessToken = function(user_id, client_id, extr
   access_token = jwt.encode(_.extend(extra_data, token_options), client_secret);
   refresh_token = this.serializer.stringify([user_id, client_id, parseInt(moment().unix(), 10)]);
 
-  var out = _.extend(token_options, {
+    // Ensure payload conforms with RFC 6749 spec.
+  var payload = {
     access_token: access_token,
+    token_type: 'bearer',
+    expires_in: token_options.exp - parseInt(moment().unix(), 10),
     refresh_token: refresh_token
-  });
-  return out;
+  };
+
+  return payload;
 };
 
 OAuth2Provider.prototype.login = function() {
@@ -240,7 +244,6 @@ OAuth2Provider.prototype.oauth = function() {
 
           self._createAccessToken(user_id, client_id, function(atok) {
             self.emit('remove_grant', user_id, client_id, code);
-
             res.end(JSON.stringify(atok));
           });
         });
@@ -258,8 +261,9 @@ OAuth2Provider.prototype._createAccessToken = function(user_id, client_id, cb) {
   this.emit('create_access_token', user_id, client_id, function(extra_data, token_options) {
     var atok = self.generateAccessToken(user_id, client_id, extra_data, token_options);
 
-    if (self.listeners('save_access_token').length > 0)
+    if (self.listeners('save_access_token').length > 0) {
       self.emit('save_access_token', user_id, client_id, atok);
+    }
 
     return cb(atok);
   });

@@ -1,0 +1,6 @@
+
+{
+    "preset": "node-style-guide",
+    "requireCamelCaseOrUpperCaseIdentifiers": false,
+    "disallowMultipleVarDecl": { allExcept: ['require'] }
+}

@@ -60,7 +60,7 @@ OAuth2Provider.prototype.generateAccessToken = function(user_id, client_id, extr
   token_options = token_options || {};
 
   var access_token, refresh_token;
-  var client_secret = token_options.client_secret || self.options.crypt_key;
+  var client_secret = token_options.client_secret || this.options.crypt_key;
   if (token_options.client_secret) {
     // Unset client_secret as it's redundant in payload.
     delete token_options.client_secret;
@@ -70,7 +70,7 @@ OAuth2Provider.prototype.generateAccessToken = function(user_id, client_id, extr
   access_token = jwt.encode(_.extend(extra_data, token_options), client_secret);
   refresh_token = this.serializer.stringify([user_id, client_id, parseInt(moment().unix(), 10)]);
 
-    // Ensure payload conforms with RFC 6749 spec.
+  // Ensure payload conforms with RFC 6749 spec.
   var payload = {
     access_token: access_token,
     token_type: 'bearer',
@@ -276,8 +276,12 @@ OAuth2Provider.prototype.prepTokenBody = function(iss, sub, aud, exp) {
     sub: sub,
     aud: aud,
     iat: parseInt(moment().unix(), 10),
-    exp: exp.key && exp.value ? parseInt(moment().add(exp.value, exp.key).unix(), 10) : null
   };
+
+  // Set expiration
+  if (exp && exp.key && exp.value) {
+    body.exp = parseInt(moment().add(exp.value, exp.key).unix(), 10);
+  }
 
   return body;
 };
